@@ -1,34 +1,33 @@
 <!doctype html>
-<html>
+<html lang="<?php echo esc_attr(str_replace('_', '-', get_locale())) ?>" data-bs-theme="<?php echo pk_theme_light() ? 'light' : 'dark'; ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport"
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <meta http-equiv='content-language' content='<?php echo get_locale() ?>'>
-    <link rel="shortcut icon" href="<?php echo pk_get_option('favicon') ?>">
-    <link rel="apple-touch-icon" href="<?php echo pk_get_option('favicon') ?>"/>
-    <?php get_template_part('inc/metas') ?>
-    <?php get_template_part('inc/seo') ?>
+    <meta http-equiv='content-language' content='<?php echo esc_attr(get_locale()) ?>'>
+    <script>
+        (function () {
+            var match = document.cookie.match(/(?:^|;\s*)mode=([^;]*)/);
+            var mode = match ? decodeURIComponent(match[1]) : '<?php echo esc_js(pk_theme_mode()); ?>';
+            var theme = mode === 'dark' ? 'dark' : 'light';
+            if (mode === 'auto' && window.matchMedia) {
+                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
+    <?php echo pk_icon_mate(); ?>
+    <?php echo pk_get_seo_title(); ?>
+    <?php if(pk_is_checked('seo_open',true) && !defined('THE_SEO_FRAMEWORK_VERSION')) get_template_part('inc/seo') ?>
     <?php wp_head(); ?>
-    <?php get_template_part('templates/css', 'grey') ?>
-    <link rel="stylesheet" data-no-instant
-          href="<?php echo pk_get_static_url(); ?>/assets/dist/libs.min.css?ver=<?php echo PUOCK_CUR_VER_STR ?>">
-    <link rel="stylesheet" data-no-instant
-          href="<?php echo pk_get_static_url(); ?>/assets/dist/style.min.css?ver=<?php echo PUOCK_CUR_VER_STR ?>">
-    <script data-no-instant
-            src="<?php echo pk_get_static_url(); ?>/assets/dist/jquery.min.js?ver=<?php echo PUOCK_CUR_VER_STR ?>"></script>
     <?php if (!empty(pk_get_option('tj_code_header', ''))): ?>
         <?php echo pk_get_option('tj_code_header', ''); ?>
     <?php endif; ?>
-    <?php if (!empty(pk_get_option('css_code_header', ''))): ?>
-        <?php echo "<style>" . pk_get_option('css_code_header', '') . "</style>"; ?>
-    <?php endif; ?>
-    <?php if (is_single() || is_page()): ?>
-    <?php endif; ?>
 </head>
-<body class="puock-<?php echo pk_theme_light() ? 'light' : 'dark' ?>">
-<div id="page">
+<body class="puock-<?php echo esc_attr(pk_theme_mode()); ?> puock-dark-palette-<?php echo esc_attr(pk_theme_dark_palette());
+echo current_theme_supports('custom-background') ? ' custom-background' : ''; ?>">
+<div>
     <?php if (is_single()): ?>
         <div class="progress" id="page-read-progress">
             <div class="progress-bar progress-bar-striped progress-bar-animated" aria-valuenow="0" aria-valuemin="0"
@@ -42,14 +41,14 @@
             } ?>">
         <div class="navbar navbar-dark shadow-sm">
             <div class="container">
-                <a href="<?php echo home_url() ?>" id="logo" class="navbar-brand">
-                    <?php if (!pk_is_checked('on_txt_logo') || empty(pk_get_option('light_logo'))): ?>
-                        <img id="logo-light" alt="logo" class="w-100 <?php echo pk_theme_light() ? '' : 'd-none' ?>"
-                             src="<?php echo pk_get_option('light_logo') ?>">
-                        <img id="logo-dark" alt="logo" class="w-100 <?php echo pk_theme_light() ? 'd-none' : '' ?>"
-                             src="<?php echo pk_get_option('dark_logo') ?>">
+                <a href="<?php echo esc_url(home_url()) ?>" id="logo" class="navbar-brand <?php if(pk_is_checked('logo_loop_light')) echo 'logo-loop-light'; ?>">
+                    <?php if (pk_is_checked('on_txt_logo') || empty(pk_get_option('light_logo')) || empty(pk_get_option('dark_logo'))): ?>
+                        <span class="puock-text txt-logo"><?php echo esc_html(pk_get_web_title()) ?></span>
                     <?php else: ?>
-                        <span class="puock-text txt-logo"><?php echo pk_get_web_title() ?></span>
+                        <img id="logo-light" alt="logo" class="w-100 <?php echo pk_theme_light() ? '' : 'd-none' ?>"
+                             src="<?php echo esc_url(pk_get_option('light_logo')) ?>">
+                        <img id="logo-dark" alt="logo" class="w-100 <?php echo pk_theme_light() ? 'd-none' : '' ?>"
+                             src="<?php echo esc_url(pk_get_option('dark_logo')) ?>">
                     <?php endif; ?>
                 </a>
                 <div class="d-none d-lg-block puock-links">
@@ -58,9 +57,14 @@
                     </div>
                 </div>
                 <div class="mobile-menus d-block d-lg-none p-1 puock-text">
-                    <i class="czs-menu-l t-xl mr-2 mobile-menu-s"></i>
-                    <i class="colorMode czs-moon-l t-xl mr-2"></i>
-                    <i class="search-modal-btn czs-search-l t-md"></i>
+                    <i class="fa fa-bars t-md me-2 mobile-menu-s"></i>
+                    <?php if (pk_is_checked('theme_mode_s')): ?>
+                        <i class="fa fa-<?php echo((pk_theme_mode() === 'auto' ? 'circle-half-stroke' : (pk_theme_light() ? 'sun' : 'moon'))); ?> colorMode t-md me-2"></i>
+                    <?php endif; ?>
+                    <?php if (pk_is_checked('cn_sc_tc_toggle')): ?>
+                        <i class="fa fa-language sc-tc-toggle t-md me-2" style="cursor:pointer"></i>
+                    <?php endif; ?>
+                    <i class="search-modal-btn fa fa-search t-md position-relative" style="top:0.5px"></i>
                 </div>
             </div>
         </div>
@@ -68,19 +72,19 @@
     <div id="search" class="d-none">
         <div class="w-100 d-flex justify-content-center">
             <div id="search-main" class="container p-block">
-                <form action="<?php echo home_url() ?>">
+                <form class="global-search-form" action="<?php echo esc_url(home_url()) ?>">
                     <div class="search-layout">
                         <div class="search-input">
-                            <input required type="text" name="s" id="s" class="form-control"
+                            <input required type="text" name="s" class="form-control"
                                    placeholder="<?php _e('请输入搜索关键字', PUOCK) ?>">
                         </div>
                         <div class="search-start">
                             <button type="submit" class="btn-dark btn"><i
-                                        class="czs-search-l mr-1"></i><?php _e('搜索', PUOCK) ?></button>
+                                        class="fa fa-search me-1"></i><?php _e('搜索', PUOCK) ?></button>
                         </div>
                         <div class="search-close-btn">
-                            <button type="button" class="btn-danger btn ml-1 search-modal-btn"><i
-                                        class="czs-close-l"></i></button>
+                            <button type="button" class="btn-danger btn ms-1 search-modal-btn"><i
+                                        class="fa fa-close"></i></button>
                         </div>
                     </div>
                 </form>
@@ -90,7 +94,7 @@
     <div id="mobile-menu" class="d-none">
         <div class="menus">
             <div class="p-block">
-                <div class="text-right"><i class="czs-close-l t-xl puock-link mobile-menu-close ta3"></i></div>
+                <div class="text-end"><i class="fa fa-close t-xl puock-link mobile-menu-close ta3"></i></div>
                 <nav>
                     <?php echo pk_get_main_menu(true) ?>
                 </nav>

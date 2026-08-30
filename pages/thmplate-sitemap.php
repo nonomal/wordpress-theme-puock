@@ -9,19 +9,20 @@ get_header();
 ?>
 
 <div id="page" class="container mt20">
+    <?php get_template_part('templates/box', 'global-top') ?>
     <?php echo pk_breadcrumbs();?>
     <div id="page-sitemap">
         <div id="page-<?php the_ID() ?>" class="row row-cols-1">
             <div id="posts" class="col-lg-<?php pk_hide_sidebar_out('12','8') ?> col-md-12 <?php pk_open_box_animated('animated fadeInLeft') ?> ">
                 <div class="p-block" id="sitemap-posts">
-                    <h2 class="t-lg puock-text">全部文章</h2>
+                    <h2 class="t-lg puock-text"><?php _e('全部文章', PUOCK) ?></h2>
                     <div class="row">
                         <?php foreach($posts as $post): setup_postdata($post) ?>
                             <div class="col-12 col-lg-6">
                                 <div class="media-link mt20">
                                     <h2 class="t-lg t-line-1" title="<?php the_title() ?>">
-                                        <i class="czs-angle-right-l t-sm c-sub mr-1"></i>
-                                        <a class="a-link t-w-400 t-md puock-text" title="<?php the_title() ?>" href="<?php the_permalink() ?>"><?php the_title() ?></a>
+                                        <i class="fa fa-angle-right t-sm c-sub me-1"></i>
+                                        <a class="a-link t-w-400 t-md puock-text" title="<?php the_title() ?>" <?php pk_link_target() ?> href="<?php the_permalink() ?>"><?php the_title() ?></a>
                                     </h2>
                                 </div>
                             </div>
@@ -29,7 +30,7 @@ get_header();
                     </div>
                 </div>
                 <div class="p-block" id="sitemap-cats">
-                    <h2 class="t-lg puock-text">分类目录</h2>
+                    <h2 class="t-lg puock-text"><?php _e('分类目录', PUOCK) ?></h2>
                     <div class="pd-links t-md no-style li-style-line mt20">
                         <ul>
                             <?php wp_list_categories('title_li='); ?>
@@ -37,9 +38,9 @@ get_header();
                     </div>
                 </div>
                 <div class="p-block" id="sitemap-pages">
-                    <h2 class="t-lg puock-text">所有单页</h2>
+                    <h2 class="t-lg puock-text"><?php _e('所有单页', PUOCK) ?></h2>
                     <div class="pd-links t-md no-style li-style-line mt20">
-                        <ul class="pl-0">
+                        <ul class="ps-0">
                             <?php wp_page_menu( array() ); ?>
                         </ul>
                     </div>
@@ -49,9 +50,8 @@ get_header();
             <?php get_sidebar() ?>
         </div>
     </div>
+    <?php get_template_part('templates/box', 'global-bottom') ?>
 </div>
-
-<?php get_template_part('templates/module', 'smiley') ?>
 
 
 <?php get_footer() ?>

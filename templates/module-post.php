@@ -1,93 +1,119 @@
 <!--文章ID：<?php the_ID() ?> -->
+<?php
+$real_cover_image = pk_get_post_cover_image();
+$display_cover_image = $real_cover_image !== '' ? $real_cover_image : get_post_images();
+$has_display_cover_image = $display_cover_image !== '';
+?>
 <?php if (pk_post_style_list()): ?>
-    <article class="block card-plain post-item p-block">
-        <div class="row">
-            <div class="col-4 col-lg-3">
-                <figure class="thumbnail">
-                    <a class="t-sm" href="<?php the_permalink() ?>">
-                        <img title="<?php the_title() ?>"
-                             alt="<?php the_title() ?>" <?php echo pk_get_lazy_img_info(get_post_images(), 'tsh', 280, 180) ?> />
-                    </a>
-                </figure>
-            </div>
-            <header class="post-info col-lg-9 col-8 d-block">
-                <h2 class="info-title t-line-1">
+    <article class="block card-plain post-item p-block post-item-list<?php echo $has_display_cover_image ? '' : ' post-item-no-thumb'; ?>">
+        <?php if ($has_display_cover_image): ?>
+        <div class="thumbnail">
+            <a class="t-sm  ww" <?php pk_link_target() ?> href="<?php the_permalink() ?>">
+                <img title="<?php the_title() ?>"
+                     alt="<?php the_title() ?>" <?php echo pk_get_lazy_img_info($display_cover_image, '', 280, 160) ?> />
+            </a>
+        </div>
+        <?php endif; ?>
+        <div class="post-info">
+            <div class="info-top">
+                <h2 class="info-title">
                     <?php if (is_sticky()): ?><span class="badge bg-danger"><i
-                                class="czs-lightning-l"></i>置顶</span><?php endif; ?>
+                                class="fa fa-bolt-lightning"></i><?php _e('置顶', PUOCK) ?></span><?php endif; ?>
+                    <?php if (!is_sticky() && is_category() && get_post_meta(get_the_ID(), 'sticky_in_category', true) === 'true'): ?><span class="badge bg-warning text-dark"><i
+                                class="fa fa-thumbtack"></i><?php _e('分类置顶', PUOCK) ?></span><?php endif; ?>
                     <?php echo get_post_category_link('badge d-none d-md-inline-block bg-' . pk_get_color_tag(['danger', 'warning', 'dark']) . ' ahfff') ?>
-                    <a class="a-link" title="<?php the_title() ?>"
+                    <a class="a-link" title="<?php the_title() ?>" <?php pk_link_target() ?>
                        href="<?php the_permalink() ?>"><?php the_title() ?></a>
                 </h2>
-                <div class="info-meta d-none d-md-block c-sub">
+                <div class="info-meta c-sub text-2line d-none d-md-block">
                     <?php the_excerpt() ?>
                 </div>
-                <div class="info-footer w-100 clearfix d-none d-block">
-                    <div class="float-left">
-                                        <span class="t-sm c-sub">
-                                                <?php if (!pk_is_checked('hide_post_views')): ?>
-                                                    <span class="mr-2"><i
-                                                                class="czs-eye-l mr-1"></i><?php pk_get_post_views() ?><span
-                                                                class="t-sm d-none d-sm-inline-block">次阅读</span></span>
-                                                <?php endif; ?>
-                                            <?php if (!pk_post_comment_is_closed()): ?>
-                                                <a class="c-sub-a" href="<?php the_permalink() ?>#comments">
-                                                    <i class="czs-comment-l mr-1"></i>
-                                                    <?php echo get_comments_number() ?><span
-                                                            class="t-sm d-none d-sm-inline-block">个评论</span></a>
-                                            <?php endif; ?>
-                                        </span>
-                    </div>
-                    <div class="float-right">
-                        <?php echo get_post_category_link('c-sub-a t-sm ml-md-2 line-h-20 d-inline-block d-md-none', '<i class="czs-tag-l mr-1"></i>') ?>
-                        <span class="t-sm ml-md-2 c-sub line-h-20 d-none d-md-inline-block"><?php pk_get_post_date() ?></span>
-                    </div>
+            </div>
+            <div class="info-footer w-100">
+                <div>
+                    <span class="t-sm c-sub">
+                            <?php if (!pk_is_checked('hide_post_views')): ?>
+                                <span class="me-2"><i
+                                            class="fa-regular fa-eye me-1"></i><?php pk_get_post_views() ?><span
+                                            class="t-sm d-none d-sm-inline-block"><?php _e('次阅读', PUOCK) ?></span></span>
+                            <?php endif; ?>
+                        <?php if (!pk_post_comment_is_closed()): ?>
+                            <a class="c-sub-a" <?php pk_link_target() ?> href="<?php the_permalink() ?>#comments">
+                                <i class="fa-regular fa-comment me-1"></i>
+                                <?php echo get_comments_number() ?><span
+                                        class="t-sm d-none d-sm-inline-block"><?php _e('个评论', PUOCK) ?></span></a>
+                        <?php endif; ?>
+                    </span>
                 </div>
-            </header>
+                <div>
+                    <?php echo get_post_category_link('c-sub-a t-sm ms-md-2 line-h-20 d-inline-block d-md-none') ?>
+                    <span class="t-sm ms-md-2 c-sub line-h-20 d-none d-md-inline-block"><i
+                                class="fa-regular fa-clock"></i> <?php pk_get_post_date() ?></span>
+                </div>
+            </div>
         </div>
         <span class="title-l-c bg-primary"></span>
     </article>
 <?php else: ?>
-    <article class="block card-plain post-item col-sm-6 col-12 post-item-card">
-        <div class="p-block">
-            <figure class="thumbnail">
-                <a class="t-sm" href="<?php the_permalink() ?>">
+    <?php
+    $card_cols = pk_cms_card_columns();
+    $card_col_class = 'col-md-6 col-12';
+    if ($card_cols == 3) {
+        $card_col_class = 'col-lg-4 col-md-6 col-sm-6 col-12';
+    } elseif ($card_cols == 4) {
+        $card_col_class = 'col-lg-3 col-md-4 col-sm-6 col-12';
+    }
+    ?>
+    <article class="block card-plain post-item <?php echo $card_col_class; ?> post-item-card<?php echo $has_display_cover_image ? '' : ' post-item-no-thumb'; ?>">
+        <div class="p-block post-item-block">
+            <?php if ($has_display_cover_image): ?>
+            <div class="thumbnail position-relative">
+                <a class="t-sm ww" <?php pk_link_target() ?> href="<?php the_permalink() ?>">
                     <img title="<?php the_title() ?>"
-                         alt="<?php the_title() ?>" <?php echo pk_get_lazy_img_info(get_post_images(), 'tsh', 400, 200) ?> />
+                         alt="<?php the_title() ?>" <?php echo pk_get_lazy_img_info($display_cover_image, '', 400, 200) ?> />
                 </a>
-            </figure>
-            <header class="post-info d-block">
-                <h2 class="info-title t-line-1">
+                <div class="post-tags">
                     <?php if (is_sticky()): ?><span class="badge bg-danger"><i
-                                class="czs-lightning-l"></i>置顶</span><?php endif; ?>
+                                class="fa fa-bolt-lightning"></i><?php _e('置顶', PUOCK) ?></span><?php endif; ?>
+                    <?php if (!is_sticky() && is_category() && get_post_meta(get_the_ID(), 'sticky_in_category', true) === 'true'): ?><span class="badge bg-warning text-dark"><i
+                                class="fa fa-thumbtack"></i><?php _e('分类置顶', PUOCK) ?></span><?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <div class="post-info">
+                <h2 class="info-title">
                     <?php echo get_post_category_link('badge d-none d-md-inline-block bg-' . pk_get_color_tag(['danger', 'warning', 'dark']) . ' ahfff') ?>
-                    <a class="a-link puock-text" title="<?php the_title() ?>"
+                    <a class="a-link puock-text" title="<?php the_title() ?>" <?php pk_link_target() ?>
                        href="<?php the_permalink() ?>"><?php the_title() ?></a>
                 </h2>
-                <div class="info-meta d-block c-sub">
-                    <p class="text-2line"><?php echo get_the_excerpt() ?></p>
-                </div>
-                <div class="info-footer w-100 clearfix d-none d-block">
-                    <div class="float-left">
-                                    <span class="t-sm c-sub">
-                                            <?php if (!pk_is_checked('hide_post_views')): ?>
-                                                <span class="mr-2">
-                                                <i class="czs-eye-l mr-1"></i><?php pk_get_post_views() ?><span
-                                                            class="t-sm d-none d-sm-inline-block">次阅读</span></span>
-                                            <?php endif; ?>
-                                        <?php if (!pk_post_comment_is_closed()): ?>
-                                            <a class="c-sub-a" href="<?php the_permalink() ?>#comments">
-                                                <i class="czs-comment-l mr-1"></i>
-                                                <?php echo get_comments_number() ?><span
-                                                        class="t-sm d-none d-sm-inline-block">个评论</span></a>
-                                        <?php endif; ?>
-                                    </span>
-                    </div>
-                    <div class="float-right">
-                        <?php echo get_post_category_link('c-sub-a t-sm ml-md-2 line-h-20 d-inline-block d-md-none', '<i class="czs-tag-l mr-1"></i>') ?>
-                        <span class="t-sm ml-md-2 c-sub line-h-20 d-none d-md-inline-block"><?php pk_get_post_date() ?></span>
+                <div class="info-meta c-sub">
+                    <div class="text-2line">
+                        <?php the_excerpt() ?>
                     </div>
                 </div>
-            </header>
+                <div class="info-footer w-100">
+                    <div>
+                   <span class="t-sm c-sub">
+                            <?php if (!pk_is_checked('hide_post_views')): ?>
+                                <span class="me-2">
+                                <i class="fa-regular fa-eye me-1"></i><?php pk_get_post_views() ?><span
+                                            class="t-sm d-none d-sm-inline-block"><?php _e('次阅读', PUOCK) ?></span></span>
+                            <?php endif; ?>
+                       <?php if (!pk_post_comment_is_closed()): ?>
+                           <a class="c-sub-a" <?php pk_link_target() ?> href="<?php the_permalink() ?>#comments">
+                                <i class="fa-regular fa-comment me-1"></i>
+                                <?php echo get_comments_number() ?><span
+                                       class="t-sm d-none d-sm-inline-block"><?php _e('个评论', PUOCK) ?></span></a>
+                       <?php endif; ?>
+                    </span>
+                    </div>
+                    <div>
+                        <?php echo get_post_category_link('c-sub-a t-sm ms-md-2 line-h-20 d-inline-block d-md-none') ?>
+                        <span class="t-sm ms-md-2 c-sub line-h-20 d-none d-md-inline-block"><i
+                                    class="fa-regular fa-clock"></i> <?php pk_get_post_date() ?></span>
+                    </div>
+                </div>
+            </div>
         </div>
     </article>
 <?php endif; ?>

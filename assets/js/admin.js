@@ -20,11 +20,7 @@ jQuery(function () {
     }
 
     function putTextToEditor(content) {
-        if (puock_admin_setting.compatible.githubermd) {
-            window.githuber_md_editor.insertValue(content)
-            return
-        }
-        send_to_editor(content)
+        wp.media.editor.insert(content)
     }
 
     mediaButtonEventHandle('#insert-smiley-button', '#insert-smiley-wrap');
@@ -39,6 +35,30 @@ jQuery(function () {
         const _this = $(this)
         const key = _this.attr("data-key")
         const attrStr = _this.attr("data-attr")
+        const defaultContent = _this.attr("data-content")
+        
+        // 尝试获取编辑器选中的文本
+        let selectedText = '';
+        
+        // 先尝试从可视化编辑器获取
+        if (typeof tinymce !== 'undefined' && tinymce.activeEditor) {
+            const editor = tinymce.activeEditor;
+            if (editor && !editor.hidden) {
+                selectedText = editor.selection.getContent({format: 'text'});
+            }
+        }
+        
+        // 如果可视化编辑器没获取到，尝试从文本编辑器获取
+        if (!selectedText && typeof wpActiveEditor !== 'undefined' && wpActiveEditor) {
+            const textarea = document.getElementById(wpActiveEditor);
+            if (textarea && textarea.selectionStart !== textarea.selectionEnd) {
+                selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
+            }
+        }
+        
+        // 如果有选中内容，使用选中文本；否则使用默认内容
+        const content = selectedText.trim() || defaultContent;
+        
         let out = `[${key}`
         if (attrStr) {
             const attr = JSON.parse(attrStr)
@@ -46,8 +66,19 @@ jQuery(function () {
                 out += ` ${attrKey}='${attr[attrKey]}'`
             }
         }
-        out += `][/${key}]`
+        out += `]${content}[/${key}]`
         putTextToEditor(out)
         $('#insert-shortcode-wrap').removeClass('cur')
     });
 })
+
+window.puockSelectMedia = (params = {}, callback = null) => {
+    const wpMedia = wp.media(params)
+    wpMedia.on('select', function () {
+        const media = wpMedia.state().get('selection').first()
+        if (callback) {
+            callback(media)
+        }
+    })
+    wpMedia.open()
+}

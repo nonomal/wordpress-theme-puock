@@ -5,13 +5,15 @@ Template Name: 读者墙
 
 $year = 2;
 $sql = "SELECT count(comment_ID) as num, comment_author_email as mail,comment_author as `name`,comment_author_url as url
-                FROM $wpdb->comments WHERE user_id !=1 AND TO_DAYS(now()) - TO_DAYS(comment_date) < (".($year*365).")
+                FROM $wpdb->comments WHERE user_id !=1 AND comment_approved =1 AND TO_DAYS(now()) - TO_DAYS(comment_date) < (".($year*365).")
                  group by comment_author_email order by num desc limit 0, 100";
 $reads = $wpdb->get_results($sql);
+$use_theme_link_forward = get_post_meta($post->ID,'use_theme_link_forward',true);
 get_header();
 ?>
 
 <div id="page" class="container mt20">
+    <?php get_template_part('templates/box', 'global-top') ?>
     <?php echo pk_breadcrumbs(); while (have_posts()):the_post();?>
         <div id="page-reads">
             <div id="page-<?php the_ID() ?>" class="row row-cols-1">
@@ -19,17 +21,17 @@ get_header();
                     <div class="p-block puock-text">
                         <h2 class="t-lg"><?php the_title() ?></h2>
                         <?php if(!empty(get_the_content())): ?>
-                            <div class="mt20 entry-content">
+                            <div class="mt20 <?php get_entry_content_class() ?>">
                                 <?php the_content() ?>
                             </div>
                         <?php endif; ?>
                         <div class="mt20 row pd-links">
                             <?php foreach ($reads as $read): ?>
-                                <div class="col col-6 col-md-4 col-lg-3 pl-0">
+                                <div class="col col-6 col-md-4 col-lg-3 ps-0">
                                     <div class="p-2 text-truncate text-nowrap">
-                                        <a href="<?php echo empty($read->url) ? 'javascript:void(0)':pk_go_link($read->url) ?>"
+                                        <a href="<?php echo $use_theme_link_forward ? pk_go_link($read->url) : $read->url; ?>"
                                             <?php echo empty($read->url) ? '':'target="_blank"' ?> rel="nofollow">
-                                            <img data-toggle="tooltip" class="md-avatar" src="<?php echo get_avatar_url($read->mail) ?>"
+                                            <img data-bs-toggle="tooltip" <?php echo pk_get_lazy_img_info(get_avatar_url($read->mail),'md-avatar') ?>
                                                  title="<?php echo $read->name?>" alt="<?php echo $read->name?>">
                                             <span class="t-sm"><span class="c-sub">+(<?php echo $read->num?>)&nbsp;</span><?php echo $read->name?></span>
                                         </a>
@@ -44,8 +46,7 @@ get_header();
             </div>
         </div>
     <?php endwhile; ?>
+    <?php get_template_part('templates/box', 'global-bottom') ?>
 </div>
-
-<?php get_template_part('templates/module', 'smiley') ?>
 
 <?php get_footer() ?>

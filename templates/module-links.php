@@ -5,18 +5,26 @@ if (!empty($link_cid)):
     <div class="p-block index-links">
         <div>
         <span class="t-lg puock-text pb-2 d-inline-block border-bottom border-primary">
-            <i class="czs-link-l"></i>&nbsp;友情链接
+            <i class="fa fa-link"></i><?php _e('友情链接', PUOCK) ?>
         </span>
         </div>
         <div class="mt20 t-md index-links-box">
             <?php
-            $links = get_bookmarks(array(
-                'category' => $link_cid,
-                'category_before' => '',
-                'title_li' => '',
-                'echo' => 0,
-                'class' => ''
-            ));
+            $links = pk_cache_get(PKC_FOOTER_LINKS);
+            if(!$links){
+                $order = pk_get_option('index_link_order', 'ASC');
+                $orderby = pk_get_option('index_link_order_by', 'link_id');
+                $links = get_bookmarks(array(
+                    'category' => $link_cid,
+                    'orderby' => $orderby,
+                    'order' => $order,
+                    'category_before' => '',
+                    'title_li' => '',
+                    'echo' => 0,
+                    'class' => ''
+                ));
+                pk_cache_set(PKC_FOOTER_LINKS, $links);
+            }
             foreach ($links as $link) {
                 if ($link->link_visible != 'Y') {
                     continue;

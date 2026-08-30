@@ -1,0 +1,112 @@
+<?php
+
+namespace Puock\Theme\setting\options;
+
+class OptionValidate extends BaseOptionItem
+{
+
+    function get_fields(): array
+    {
+        return [
+            'key' => 'validate',
+            'label' => __('验证及防刷', PUOCK),
+            'icon' => 'dashicons-shield',
+            'fields' => [
+                [
+                    'id' => 'vd_type',
+                    'label' => __('验证码类型', PUOCK),
+                    'type' => 'radio',
+                    'sdt' => 'img',
+                    'radioType' => 'button',
+                    'tips' => __('若使用 Cloudflare Turnstile：到 Cloudflare Dashboard > Turnstile 创建站点，填写 Site Key / Secret Key，验证码类型选择 Cloudflare Turnstile，并开启「启用评论验证」或「启用后台注册验证」。站点域名需加入 Turnstile 允许主机。', PUOCK),
+                    'options' => [
+                        [
+                            'value' => 'img',
+                            'label' => __('图形验证码', PUOCK),
+                        ],
+                        [
+                            'value' => 'gt',
+                            'label' => __('极验验证码', PUOCK),
+                        ],
+                        [
+                            'value' => 'turnstile',
+                            'label' => 'Cloudflare Turnstile',
+                        ],
+                    ],
+                ],
+                [
+                    'id' => 'vd_comment',
+                    'label' => __('启用评论验证', PUOCK),
+                    'type' => 'switch',
+                    'sdt' => false,
+                ],
+                [
+                    'id' => 'vd_register',
+                    'label' => __('启用后台注册验证', PUOCK),
+                    'type' => 'switch',
+                    'tips' => __('开启后，WordPress后台注册页面将显示验证码（支持图形验证码和Turnstile）', PUOCK),
+                    'sdt' => false,
+                ],
+                [
+                    'id' => '-',
+                    'type' => 'panel',
+                    'label' => __('极验验证码', PUOCK),
+                    'open' => true,
+                    'children' => [
+                        [
+                            'id' => 'vd_gt_id',
+                            'label' => __('极验验证ID', PUOCK),
+                            'sdt' => ''
+                        ],
+                        [
+                            'id' => 'vd_gt_key',
+                            'label' => __('极验验证Key', PUOCK),
+                            'sdt' => ''
+                        ]
+                    ]
+                ],
+                [
+                    'id' => '-',
+                    'type' => 'panel',
+                    'label' => 'Cloudflare Turnstile',
+                    'open' => true,
+                    'tips' => __('到 Cloudflare Dashboard > Turnstile 创建站点，填写 Site Key / Secret Key，验证码类型选择 Cloudflare Turnstile，并开启「启用评论验证」或「启用后台注册验证」。站点域名需加入 Turnstile 允许主机。', PUOCK),
+                    'children' => [
+                        [
+                            'id' => 'vd_turnstile_site_key',
+                            'label' => __('Turnstile Site Key', PUOCK),
+                            'sdt' => '',
+                            'tips' => __('在 Cloudflare Dashboard > Turnstile 中创建站点后获取', PUOCK),
+                        ],
+                        [
+                            'id' => 'vd_turnstile_secret_key',
+                            'label' => __('Turnstile Secret Key', PUOCK),
+                            'sdt' => '',
+                            'tips' => __('在 Cloudflare Dashboard > Turnstile 中创建站点后获取，请妥善保管', PUOCK),
+                        ]
+                    ]
+                ],
+                [
+                    'id' => 'vd_comment_need_chinese',
+                    'label' => __('评论内容中必须含有中文字符', PUOCK),
+                    'type' => 'switch',
+                    'tips' => __('开启后，评论中必须含有至少1个中文字符，否则将会被拦截', PUOCK),
+                    'sdt' => false,
+                ],
+                [
+                    'id' => 'vd_kwd_access_reject',
+                    'label' => __('恶意统计关键字访问屏蔽', PUOCK),
+                    'type' => 'switch',
+                    'tips' => __('开启后，将会使含有指定关键字的query参数请求得到403拒绝访问，防止站点统计的恶意刷量', PUOCK),
+                    'sdt' => false,
+                ],
+                [
+                    'id' => 'vd_kwd_access_reject_list',
+                    'label' => __('恶意统计关键字访问屏蔽参数', PUOCK),
+                    'tips' => __('多个之间使用半角<code>,</code>进行分隔', PUOCK),
+                    'sdt' => 'wd,str',
+                ],
+            ],
+        ];
+    }
+}

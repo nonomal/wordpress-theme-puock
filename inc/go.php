@@ -1,20 +1,27 @@
 <?php
 
-$other_page_title = "链接跳转";
-
 include '../../../../wp-blog-header.php';
-
-$url = @$_GET['to'];
+pk_set_custom_seo(__("链接跳转", PUOCK));
+$url = '';
+$raw_url = $_GET['to'] ?? '';
+$name = $_GET['name'] ?? '';
+if (!empty($name)) {
+    $name = base64_decode(str_replace(' ', '+', $name), true);
+    if ($name === false) {
+        $name = '';
+    }
+}
 $error = null;
-if (empty($url)) {
-    $error = "目标网址为空，无法进行跳转";
+if (empty($raw_url)) {
+    $error = __("目标网址为空，无法进行跳转", PUOCK);
 } else {
-    $url = htmlentities($url);
+    $decoded_url = base64_decode(str_replace(' ', '+', $raw_url), true);
+    $url = $decoded_url === false ? '' : esc_url_raw($decoded_url, ['http', 'https']);
     if (strpos($url, "https://") !== 0 && strpos($url, "http://") !== 0) {
-        $error = "跳转链接协议有误";
+        $error = __("跳转链接协议有误", PUOCK);
     } else {
-        if (strpos($url, home_url()) === 0) {
-            header("Location:" . $url);
+        if (pk_is_cur_site($url)) {
+            wp_safe_redirect($url);
             exit();
         }
     }
@@ -30,21 +37,19 @@ get_header();
     <?php echo pk_breadcrumbs() ?>
 
     <div class="text-center p-block puock-text">
-        <h3 class="mt20">跳转提示</h3>
+        <h3 class="mt20"><?php _e('跳转提示', PUOCK) ?></h3>
         <?php if (!empty($error)): ?>
-            <p class="mt20"><?php echo $error ?></p>
+            <p class="mt20"><?php echo esc_html($error) ?></p>
         <?php else: ?>
             <p class="mt20">
-                <span>您即将离开<?php echo get_bloginfo('name') ?>跳转至</span>
-                <a class="a-link" rel="nofollow" href="<?php echo $url ?>"><?php echo $url; ?></a>
-                <span>，确定进入吗？</span>
+                <span><?php echo esc_html(sprintf(__('您即将离开%s跳转至', PUOCK), get_bloginfo('name'))); ?></span><?php echo esc_html(empty($name) ? $url : $name); ?><span><?php _e('，确定进入吗？', PUOCK); ?></span>
             </p>
         <?php endif; ?>
         <div class="text-center mt20">
-            <a rel="nofollow" href="<?php echo $url; ?>" class="btn btn-ssm btn-primary"><i
-                        class="czs-paper-plane-l"></i>&nbsp;立即进入</a>
-            <a href="<?php echo home_url() ?>" class="btn btn-ssm btn-secondary"><i
-                        class="czs-home-l"></i>&nbsp;返回首页</a>
+            <a rel="nofollow" href="<?php echo esc_url($url); ?>" class="btn btn-ssm btn-primary"><i
+                        class="fa-regular fa-paper-plane"></i>&nbsp;<?php _e('立即进入', PUOCK) ?></a>
+            <a href="<?php echo esc_url(home_url()) ?>" class="btn btn-ssm btn-secondary"><i
+                        class="fa fa-home"></i>&nbsp;<?php _e('返回首页', PUOCK) ?></a>
         </div>
     </div>
 </div>

@@ -1,19 +1,18 @@
 <?php
 
-//添加session支持
-
-function register_session()
-{
-    if (!session_id()) {
-        session_start();
-    }
-}
-
-register_session();
-
+define('PUOCK_ABS_DIR', get_template_directory());
+define('PUOCK_ABS_URI', get_template_directory_uri());
+define('PUOCK_CUR_VER_STR', wp_get_theme()->get('Version'));
+const PUOCK = 'puock';
+const PUOCK_OPT = 'puock_options';
 $puock_colors_name = ['primary', 'danger', 'info', 'success', 'warning', 'dark', 'secondary'];
 
-include('inc/fun/core.php');
+require_once __DIR__ . '/vendor/autoload.php';
+include_once('inc/fun/core.php');
+include_once('gutenberg/index.php');
+
+
+
 
 //去除感谢使用wordpress创作
 if (pk_is_checked('hide_footer_wp_t')) {
@@ -38,14 +37,21 @@ if (pk_is_checked('hide_footer_wp_t')) {
     add_filter('update_footer', 'my_update_footer', 50);
 }
 
-//禁用5.0编辑器
+//禁用5.0古登堡编辑器
 if (pk_is_checked('stop5x_editor')) {
     add_filter('use_block_editor_for_post', '__return_false');
     remove_action('wp_enqueue_scripts', 'wp_common_block_scripts_and_styles');
+    function remove_global_styles_and_svg_filters()
+    {
+        remove_action('wp_enqueue_scripts', 'wp_enqueue_global_styles');
+        remove_action('wp_body_open', 'wp_global_styles_render_svg_filters');
+    }
+
+    add_action('init', 'remove_global_styles_and_svg_filters');
 }
 
 //区块小工具
-if(!pk_is_checked('use_widgets_block')){
+if (!pk_is_checked('use_widgets_block')) {
     pk_off_widgets_block();
 }
 
@@ -55,32 +61,22 @@ function pk_the_author_class_out($count)
     if ($count <= 0) {
         return '';
     }
-    switch ($count) {
-        case $count >= 1 && $count < 20:
-            $level = 1;
-            break;
-        case $count >= 20 && $count < 40:
-            $level = 2;
-            break;
-        case $count >= 40 && $count < 60:
-            $level = 3;
-            break;
-        case $count >= 60 && $count < 80:
-            $level = 4;
-            break;
-        case $count >= 120 && $count < 120:
-            $level = 5;
-            break;
-        case $count >= 140 && $count < 140:
-            $level = 6;
-            break;
-        case $count >= 160 && $count < 160:
-            $level = 7;
-            break;
-        default:
-            return '';
+    if ($count < 20) {
+        $level = 1;
+    } elseif ($count < 40) {
+        $level = 2;
+    } elseif ($count < 60) {
+        $level = 3;
+    } elseif ($count < 80) {
+        $level = 4;
+    } elseif ($count < 120) {
+        $level = 5;
+    } elseif ($count < 160) {
+        $level = 6;
+    } else {
+        $level = 7;
     }
-    return '<span class="t-sm c-sub"><i class="czs-diamond-l mr-1"></i>' . __('评论达人', PUOCK) . ' LV.' . $level . '</span>';
+    return '<span class="t-sm c-sub"><i class="fa-regular fa-gem me-1"></i>' . __('评论达人', PUOCK) . ' LV.' . $level . '</span>';
 }
 
 function pk_the_author_class($echo = true, $in_comment = null)
@@ -90,11 +86,16 @@ function pk_the_author_class($echo = true, $in_comment = null)
         $comment = $in_comment;
     }
     if ($comment->user_id == '1') {
-        $res = '<span class="t-sm text-danger"><i class="czs-diamond-l mr-1"></i>' . __('博主', PUOCK) . '</span>';
+        $res = '<span class="t-sm text-danger"><i class="fa-regular fa-gem me-1"></i>' . __('博主', PUOCK) . '</span>';
     } else {
         $comment_author_email = $comment->comment_author_email;
-        $author_count = count($wpdb->get_results(
-            "SELECT comment_ID as author_count FROM $wpdb->comments WHERE comment_author_email = '$comment_author_email' "));
+        $cache_key = sprintf(PKC_AUTHOR_COMMENTS, md5($comment_author_email));
+        $author_count = pk_cache_get($cache_key);
+        if (!$author_count) {
+            $query = $wpdb->prepare("SELECT count(1) as c FROM $wpdb->comments WHERE comment_author_email = %s", $comment_author_email);
+            $author_count = $wpdb->get_results($query)[0]->c;
+            pk_cache_set($cache_key, $author_count);
+        }
         $res = pk_the_author_class_out($author_count);
     }
     if (!$echo) {
@@ -128,7 +129,7 @@ function get_post_category_link_exec($all = true, $class = '', $icon = '', $cid 
     if ($cid != null) {
         $cate = get_category($cid);
         if ($cate != null) {
-            return '<a class="' . $class . '" href="' . get_category_link($cate) . '">' . $icon . $cate->name . '</a>';
+            return '<a ' . pk_link_target(false) . ' class="' . $class . '" href="' . get_category_link($cate) . '">' . $icon . $cate->name . '</a>';
         }
     } else {
         $cats = get_the_category();
@@ -136,17 +137,13 @@ function get_post_category_link_exec($all = true, $class = '', $icon = '', $cid 
             if ($all) {
                 $out = "";
                 foreach ($cats as $cate) {
-                    $out .= '<a class="' . $class . '" href="' . get_category_link($cate) . '">' . $icon . $cate->name . '</a>、';
+                    $out .= '<a ' . pk_link_target(false) . ' class="' . $class . ' mr5" href="' . get_category_link($cate) . '"><i class="fa-regular fa-folder-open"></i> ' . $icon . $cate->name . '</a> ';
                 }
                 $out = mb_substr($out, 0, mb_strlen($out) - 1);
                 return $out;
             } else {
-                if (!is_category()) {
-                    $cate = $cats[0];
-                } else {
-                    $cate = get_category($cat);
-                }
-                return '<a class="' . $class . '" href="' . get_category_link($cate) . '">' . $icon . $cate->name . '</a>';
+                $cate = $cats[0];
+                return '<a ' . pk_link_target(false) . ' class="' . $class . '" href="' . get_category_link($cate) . '"><i class="fa-regular fa-folder-open"></i> ' . $icon . $cate->name . '</a>';
             }
         }
     }
@@ -154,7 +151,7 @@ function get_post_category_link_exec($all = true, $class = '', $icon = '', $cid 
 }
 
 //获取文章标签
-function get_post_tags($class = '')
+function get_post_tags($class = '', $item_class = '')
 {
     global $puock_colors_name;
     $tags = get_the_tags();
@@ -162,8 +159,8 @@ function get_post_tags($class = '')
     if ($tags && count($tags) > 0) {
         $out .= '<div class="' . $class . '">';
         foreach ($tags as $tag) {
-            $color_index = mt_rand(0, count($puock_colors_name) - 1);
-            $out .= '<a href="' . get_tag_link($tag) . '" class="ahfff curp mr-1 badge badge-' . $puock_colors_name[$color_index] . '"># ' . $tag->name . '</a>';
+            //            $color_index = mt_rand(0, count($puock_colors_name) - 1);
+            $out .= '<a href="' . get_tag_link($tag) . '" class="pk-badge pk-badge-sm mr5 ' . $item_class . '"><i class="fa-solid fa-tag"></i> ' . $tag->name . '</a>';
         }
         $out .= '</div>';
     } else {
@@ -178,27 +175,26 @@ function pk_get_post_date()
     $c_time = time() - $time;
     $day = 86400;
     switch ($c_time) {
-        //todo 本地化翻译
         case $c_time < $day:
-            $res = '近一天内';
+            $res = __('近一天内',PUOCK);
             break;
         case $c_time < ($day * 2):
-            $res = '近两天内';
+            $res = __('近两天内',PUOCK);
             break;
         case $c_time < ($day * 3):
-            $res = '近三天内';
+            $res = __('近三天内',PUOCK);
             break;
         case $c_time < ($day * 4):
-            $res = '四天前';
+            $res = __('四天前',PUOCK);
             break;
         case $c_time < ($day * 5):
-            $res = '五天前';
+            $res = __('五天前',PUOCK);
             break;
         case $c_time < ($day * 6):
-            $res = '六天前';
+            $res = __('六天前',PUOCK);
             break;
         default:
-            $res = date('Y-m-d', $time);
+            $res = get_the_date(get_option('date_format'));
     }
     echo $res;
 }
@@ -212,19 +208,19 @@ function pk_get_color_tag($ex = array())
         if (!in_array($c, $ex)) {
             return $c;
         }
-    };
+    }
 }
 
 
 function get_smiley_codes()
 {
-    //todo 本地化翻译
-    return array(":?:" => "疑问", ":razz:" => "调皮", ":sad:" => "难过", ":evil:" => "抠鼻", ":naughty:" => "顽皮",
-        ":!:" => "吓", ":smile:" => "微笑", ":oops:" => "憨笑", ":neutral:" => "亲亲", ":cry:" => "大哭", ":mrgreen:" => "呲牙",
-        ":grin:" => "坏笑", ":eek:" => "惊讶", ":shock:" => "发呆", ":???:" => "撇嘴", ":cool:" => "酷", ":lol:" => "偷笑",
-        ":mad:" => "咒骂", ":twisted:" => "发怒", ":roll:" => "白眼", ":wink:" => "鼓掌", ":idea:" => "想法", ":despise:" => "蔑视",
-        ":celebrate:" => "庆祝", ":watermelon:" => "西瓜", ":xmas:" => "圣诞", ":warn:" => "警告", ":rainbow:" => "彩虹",
-        ":loveyou:" => "爱你", ":love:" => "爱", ":beer:" => "啤酒",
+    return array(
+        ":?:" => __("疑问", PUOCK), ":razz:" => __("调皮", PUOCK), ":sad:" => __("难过", PUOCK), ":evil:" => __("抠鼻", PUOCK), ":naughty:" => __("顽皮", PUOCK),
+        ":!:" => __("吓", PUOCK), ":smile:" => __("微笑", PUOCK), ":oops:" => __("憨笑", PUOCK), ":neutral:" => __("亲亲", PUOCK), ":cry:" => __("大哭", PUOCK), ":mrgreen:" => __("呲牙", PUOCK),
+        ":grin:" => __("坏笑", PUOCK), ":eek:" => __("惊讶", PUOCK), ":shock:" => __("发呆", PUOCK), ":???:" => __("撇嘴", PUOCK), ":cool:" => __("酷", PUOCK), ":lol:" => __("偷笑", PUOCK),
+        ":mad:" => __("咒骂", PUOCK), ":twisted:" => __("发怒", PUOCK), ":roll:" => __("白眼", PUOCK), ":wink:" => __("鼓掌", PUOCK), ":idea:" => __("想法", PUOCK), ":despise:" => __("蔑视", PUOCK),
+        ":celebrate:" => __("庆祝", PUOCK), ":watermelon:" => __("西瓜", PUOCK), ":xmas:" => __("圣诞", PUOCK), ":warn:" => __("警告", PUOCK), ":rainbow:" => __("彩虹", PUOCK),
+        ":loveyou:" => __("爱你", PUOCK), ":love:" => __("爱", PUOCK), ":beer:" => __("啤酒", PUOCK),
     );
 }
 
@@ -266,10 +262,14 @@ add_action('init', 'puock_twemoji_smiley', 3);
 
 function get_wpsmiliestrans()
 {
-    global $wpsmiliestrans, $output;
+    global $wpsmiliestrans;
+    $output = '';
+    if (!is_array($wpsmiliestrans)) {
+        $wpsmiliestrans = array();
+    }
     $wpsmilies = array_unique($wpsmiliestrans);
     foreach ($wpsmilies as $alt => $src_path) {
-        $output .= '<a class="add-smily" data-smilies="' . $alt . '"><img class="wp-smiley" src="' . get_bloginfo('template_directory') . '/assets/img/smiley/' . rtrim($src_path, "png") . 'png" /></a>';
+        $output .= '<a class="add-smily" data-smilies="' . $alt . '"><img src="' . get_bloginfo('template_directory') . '/assets/img/smiley/' . rtrim($src_path, "png") . 'png" /></a>';
     }
     return $output;
 }
@@ -282,34 +282,137 @@ function smilies_custom_button($context)
         <span>' . __('添加表情', PUOCK) . '</span> 
         </a><div id="insert-smiley-wrap" class="pk-media-wrap" style="display: none">' . get_wpsmiliestrans() . '</div>';
 }
-
-function get_post_images($post_id = null)
+/**
+ * 获取文章真实封面图：优先级 = 特色图 > 外部特色图 > 内容第一张图（支持 Markdown）
+ *
+ * @param int|WP_Post|null $_post 文章 ID 或对象，null 则使用全局 $post
+ * @return string 图片 URL，不存在时返回空字符串
+ */
+function pk_get_post_cover_image($_post = null): string
 {
     global $post;
-    // 如果有封面图取封面图
-    if (has_post_thumbnail()) {
-        $res = get_the_post_thumbnail_url($post, 'large');
-        if ($res != null) {
-            return $res;
+
+    $post_obj = $_post ? get_post($_post) : $post;
+    if (!$post_obj) {
+        return '';
+    }
+
+    $post_id = (int)$post_obj->ID;
+    $content = $post_obj->post_content;
+
+    if (has_post_thumbnail($post_id)) {
+        $featured_url = get_the_post_thumbnail_url($post_id, 'large');
+        if ($featured_url) {
+            return esc_url($featured_url);
         }
     }
-    if ($post_id == null && $post) {
-        $content = $post->post_content;
-    } else {
-        $content = get_post($post_id)->post_content;
+
+    $external_thumb = get_post_meta($post_id, 'external_thumbnail_url', true);
+    if ($external_thumb) {
+        return esc_url($external_thumb);
     }
-    preg_match_all('/<img.+src=[\'"]([^\'"]+)[\'"].*>/i', $content, $matches);
-    if ($matches && $matches[1]) {
-        $res = $matches[1][0];
-    } else {
-        $res = get_stylesheet_directory_uri() . '/assets/img/random/' . mt_rand(1, 8) . '.jpg';
+
+    $first_image = null;
+    if (preg_match('/!\[[^\]]*\]\(\s*([^\s\)]+?)\s*([\'"][^\'"]*?[\'"])?\s*\)/i', $content, $matches)) {
+        $first_image = trim($matches[1]);
+    } elseif (preg_match('/<img[^>]+src=[\'"]([^\'"]+)[\'"]/i', $content, $matches)) {
+        $first_image = $matches[1];
     }
-    return $res;
+
+    if ($first_image) {
+        $first_image = WP_Http::make_absolute_url($first_image, home_url('/'));
+    }
+
+    if ($first_image && filter_var($first_image, FILTER_VALIDATE_URL)) {
+        return esc_url($first_image);
+    }
+
+    return '';
+}
+
+function pk_post_has_cover_image($_post = null): bool
+{
+    return pk_get_post_cover_image($_post) !== '';
+}
+
+/**
+ * 获取文章封面图：优先级 = 真实封面图 > 随机默认图
+ *
+ * @param int|WP_Post|null $_post 文章 ID 或对象，null 则使用全局 $post
+ * @return string 图片 URL
+ */
+function get_post_images($_post = null): string
+{
+    global $post;
+
+    $cover_image = pk_get_post_cover_image($_post);
+    if ($cover_image !== '') {
+        return $cover_image;
+    }
+
+    $post_obj = $_post ? get_post($_post) : $post;
+    if (!$post_obj) {
+        return get_random_default_image();
+    }
+
+    return get_random_default_image((int)$post_obj->ID);
+}
+
+/**
+ * glob() 兼容封装。
+ * Alpine / musl 等 PHP 构建不提供 GLOB_BRACE，直接使用会 Fatal Error。
+ *
+ * @param string $pattern
+ * @return string[]
+ */
+function pk_glob($pattern): array
+{
+    if (defined('GLOB_BRACE')) {
+        $files = glob($pattern, GLOB_BRACE);
+        return is_array($files) ? $files : [];
+    }
+
+    if (preg_match('/^(.*)\{([^}]+)\}(.*)$/', $pattern, $m)) {
+        $files = [];
+        foreach (explode(',', $m[2]) as $alt) {
+            $matched = glob($m[1] . $alt . $m[3]);
+            if (is_array($matched)) {
+                $files = array_merge($files, $matched);
+            }
+        }
+        return $files;
+    }
+
+    $files = glob($pattern);
+    return is_array($files) ? $files : [];
+}
+
+/**
+ * 获取随机默认图片
+ * 基于文章ID生成伪随机数，确保同一文章始终使用相同图片，不同文章尽量不同
+ *
+ * @param int|null $post_id 文章ID，为null时使用纯随机
+ * @return string 默认图 URL
+ */
+function get_random_default_image($post_id = null): string
+{
+    $img_dir = get_template_directory() . '/assets/img/random/';
+    $img_uri = get_template_directory_uri() . '/assets/img/random/';
+    $files = pk_glob($img_dir . '*.{jpg,jpeg,png,gif,webp,avif}');
+    $count = $files ? count($files) : 8;
+    if ($post_id) {
+        $index = (crc32('puock_rand_' . $post_id) % $count);
+        $index = abs($index);
+    } else {
+        $index = mt_rand(0, $count - 1);
+    }
+    $filename = $files ? basename($files[$index]) : ($index + 1) . '.jpg';
+    return esc_url($img_uri . $filename);
 }
 
 //分页功能
 if (!function_exists('pk_paging')) {
-    function pk_paging($pnum = 2, $position = 'right')
+    function pk_paging($pnum = 2)
     {
         if (is_singular()) {
             return;
@@ -317,7 +420,7 @@ if (!function_exists('pk_paging')) {
         global $wp_query, $paged;
         $max_page = $wp_query->max_num_pages;
         if ($max_page == 1) return;
-        echo '<div class="mt20 clearfix"><ul class="pagination float-' . $position . '">';
+        echo '<div class="mt20 p-flex-s-right"><ul class="pagination">';
         if (empty($paged)) $paged = 1;
         echo '<li class="prev-page puock-bg">';
         previous_posts_link('&laquo;');
@@ -333,7 +436,10 @@ if (!function_exists('pk_paging')) {
                 }
             }
         }
-        if ($paged < $max_page - $pnum - 1) echo "<li><a href='javascript:void(0)'>...</a></li>";
+        if ($paged < $max_page - $pnum - 1) {
+            echo "<li><a href='javascript:void(0)'>...</a></li>";
+            page_link($max_page);
+        }
         echo '<li class="next-page">';
         next_posts_link('&raquo;');
         echo '</li>';
@@ -349,7 +455,8 @@ if (!function_exists('pk_paging')) {
 //获取面包屑导航
 function pk_breadcrumbs()
 {
-    global $cat, $other_page_title;
+    global $cat;
+    $custom_seo_title = pk_get_custom_seo()['title'] ?? '';
     $out = '<div id="breadcrumb" class="' . (pk_open_box_animated('animated fadeInUp', false)) . '">';
     $out .= '<nav aria-label="breadcrumb">';
     $out .= '<ol class="breadcrumb">';
@@ -359,11 +466,15 @@ function pk_breadcrumbs()
         if (count($categorys) <= 0 && is_single()) {
             return false;
         }
-        $category = $categorys[0];
-        if ($category == null && is_category()) {
-            $category = get_category($cat);
+        if (is_single()) {
+            $category = $categorys[0];
+            if ($category == null && is_category()) {
+                $category = get_category($cat);
+            }
+            $cats = get_category_parents($category->term_id, true, '');
+        } else {
+            $cats = get_category_parents($cat, true, '');
         }
-        $cats = get_category_parents($category->term_id, true, '');
         $cats = str_replace("<a", '<li class="breadcrumb-item"><a class="a-link"', $cats);
         $cats = str_replace("</a>", '</a></li>', $cats);
         $out .= $cats;
@@ -373,10 +484,12 @@ function pk_breadcrumbs()
             $out .= '<li class="breadcrumb-item active " aria-current="page">' . __('文章列表', PUOCK) . '</li>';
         }
     } else if (is_search()) {
-        $out .= '<li class="breadcrumb-item active " aria-current="page">' . ($_GET['s']) . '</li>';
+        $out .= '<li class="breadcrumb-item active " aria-current="page">' . (esc_html($_GET['s'])) . '</li>';
         $out .= '<li class="breadcrumb-item active " aria-current="page">' . __('搜索结果', PUOCK) . '</li>';
     } else if (is_author()) {
-        $out .= '<li class="breadcrumb-item active " aria-current="page">' . get_the_author_meta('nickname') . '' . __('的文章列表', PUOCK) . '</li>';
+        $out .= '<li class="breadcrumb-item active " aria-current="page">' . get_the_author_meta('nickname') . '</li>';
+    } else if (is_date()) {
+        $out .= '<li class="breadcrumb-item active " aria-current="page">' . get_the_date() . '</li>';
     } else if (is_page()) {
         global $post;
         $out .= '<li class="breadcrumb-item active " aria-current="page">' . ($post->post_title) . '</li>';
@@ -384,20 +497,101 @@ function pk_breadcrumbs()
         $tag_name = single_tag_title('', false);
         $out .= '<li class="breadcrumb-item active " aria-current="page">' . __('标签', PUOCK) . '</li>';
         $out .= '<li class="breadcrumb-item active " aria-current="page">' . ($tag_name) . '</li>';
+    } else if (!empty($custom_seo_title)) {
+        $out .= '<li class="breadcrumb-item active " aria-current="page">' . $custom_seo_title . '</li>';
     } else if (is_404()) {
         $out .= '<li class="breadcrumb-item active " aria-current="page">' . __('你访问的资源不存在', PUOCK) . '</li>';
-    } else if (isset($other_page_title)) {
-        $out .= '<li class="breadcrumb-item active " aria-current="page">' . $other_page_title . '</li>';
     }
     $out .= '</div></nav></ol>';
     return $out;
+}
+
+/**
+ * 返回图标信息
+ *
+ * @return string
+ * @author lvshujun
+ * @date 2024-03-19
+ */
+function pk_icon_mate() {
+    //获取icon地址
+    $pk_icon = pk_get_option('favicon');
+    //未设置返回空
+    if ($pk_icon === '') return '';
+    
+    //连接字符串
+    $str = '<link rel="shortcut icon" href="' . esc_url($pk_icon) . '">
+    <link rel="apple-touch-icon" href="' . esc_url($pk_icon) . '"/>';
+
+    return $str;
+}
+
+/**
+ * 输出SEO标题
+ *
+ * @return string SEO标题
+ * @author lvshujun
+ * @date 2024-03-19
+ */
+function pk_get_seo_title() {
+    // 未启用SEO返回空
+    if (!pk_is_checked('seo_open',true) || defined('THE_SEO_FRAMEWORK_VERSION')) {
+        return '';
+    }
+    // 用户定义的连接符
+    $pk_title_conn = ' ' . pk_get_option("title_conn") . ' ';
+    // 网站名称
+    $pk_blog_name = pk_get_web_title();
+    // 分页情况
+    $pk_paged_title = '';
+    if (get_query_var('paged')) {
+        $pk_paged_title = $pk_title_conn . sprintf(__('第%d页', PUOCK), get_query_var('paged'));
+    }
+    // 获取SEO设置
+    $pk_custom_seo_title = pk_get_custom_seo()['title'] ?? '';
+    // 输出内容
+    $pk_title = '';
+    // 通用结尾
+    $pk_common_end = $pk_paged_title . $pk_title_conn . $pk_blog_name;
+    // 已经自定义标题
+    if (!empty($pk_custom_seo_title)) {
+        $pk_title .= $pk_custom_seo_title . $pk_common_end;
+    } else if (is_home()) {
+        $pk_description = pk_get_option('web_title_2');
+        if (!empty($pk_description)) {
+            $pk_title .= $pk_blog_name . $pk_paged_title . $pk_title_conn . $pk_description;
+        } else {
+            $pk_title .= $pk_blog_name . $pk_paged_title;
+        }
+    } else if (is_search()) {
+        $pk_title .= sprintf(__('搜索"%s"的结果', PUOCK), esc_html($_REQUEST['s'])) . $pk_common_end;
+    } else if (is_single() || is_page()) {
+        $pk_title .= single_post_title('', false) . $pk_common_end;
+    } else if (is_year()) {
+        $pk_title .= sprintf(__('%s年的所有文章', PUOCK), get_the_time('Y')) . $pk_common_end;
+    } else if (is_month()) {
+        $pk_title .= sprintf(__('%s月的所有文章', PUOCK), get_the_time('m')) . $pk_common_end;
+    } else if (is_day()) {
+        $pk_title .= sprintf(__('%s年%s月%s日的所有文章', PUOCK), get_the_time('Y'), get_the_time('m'), get_the_time('d')) . $pk_common_end;
+    } else if (is_author()) {
+        $pk_title .= sprintf(__('作者：%s', PUOCK), get_the_author()) . $pk_common_end;
+    } else if (is_category()) {
+        $pk_title .= single_cat_title('', false) . $pk_common_end;
+    } else if (is_tag()) {
+        $pk_title .= single_tag_title('', false) . $pk_common_end;
+    } else if (is_404()) {
+        $pk_title .= __('你访问的资源不存在', PUOCK) . $pk_common_end;
+    } else {
+        $pk_title .= $pk_blog_name . $pk_paged_title;
+    }
+    return '<title>' . esc_html($pk_title) . '</title>';
 }
 
 //获取阅读数量
 function pk_get_post_views()
 {
     if (function_exists('the_views')) {
-        echo the_views();
+        echo the_views(null, false);
     } else {
         echo 0;
     }
@@ -416,6 +610,9 @@ function count_words($text = null)
 //给文章内容添加灯箱
 function light_box_text_replace($content)
 {
+    if (!is_string($content)) {
+        return $content;
+    }
     $pattern = "/<a(.*?)href=('|\")([A-Za-z0-9\/_\.\~\:-]*?)(\.bmp|\.gif|\.jpg|\.jpeg|\.png)('|\")([^\>]*?)>/i";
     $replacement = '<a$1href=$2$3$4$5$6 class="fancybox" data-no-instant target="_blank">';
     $content = preg_replace($pattern, $replacement, $content);
@@ -429,11 +626,15 @@ add_filter('the_content', 'light_box_text_replace', 99);
 function content_img_add_alt_title($content)
 {
     global $post;
+    if (!is_string($content)) {
+        return $content;
+    }
     preg_match_all('/<img (.*?)\/>/', $content, $images);
     if (!is_null($images)) {
+        $title = @$post->post_title;
         foreach ($images[1] as $index => $value) {
-            $new_img = str_replace('<img', '<img title=' . $post->post_title . '
-             alt=' . $post->post_title, $images[0][$index]);
+            $new_img = str_replace('<img', '<img title="' . $title . '"
+             alt="' . $title . '"', $images[0][$index]);
             $content = str_replace($images[0][$index], $new_img, $content);
         }
     }
@@ -446,6 +647,9 @@ add_filter('the_content', 'content_img_add_alt_title', 99);
 function pk_bootstrap_table_class($content)
 {
     global $post;
+    if (!is_string($content)) {
+        return $content;
+    }
     preg_match_all('/<table.*?>[\s\S]*<\/table>/', $content, $tables);
     if (!is_null($tables)) {
         foreach ($tables[0] as $index => $value) {
@@ -468,6 +672,54 @@ add_action('wp_enqueue_scripts', 'pk_init_wp_empty_style');
 
 require_once dirname(__FILE__) . '/fun-custom.php';
 
+function pk_update_package_url_is_safe($version, $download_url)
+{
+    if (!is_string($version) || !is_string($download_url)
+        || preg_match('/^\d+\.\d+\.\d+$/D', $version) !== 1) {
+        return false;
+    }
+
+    $asset_path = sprintf(
+        '/Licoy/wordpress-theme-puock/releases/download/v%1$s/Puock-V%1$s.zip',
+        $version
+    );
+
+    return in_array($download_url, [
+        'https://github.com' . $asset_path,
+        'https://gh.gitcdn.top/https://github.com' . $asset_path,
+    ], true);
+}
+
+function pk_filter_update_package($update, $http_response = null)
+{
+    if ($update === null) {
+        return null;
+    }
+
+    $version = is_object($update) && isset($update->version) && is_string($update->version)
+        ? $update->version
+        : '';
+    $download_url = is_object($update) && isset($update->download_url) && is_string($update->download_url)
+        ? $update->download_url
+        : '';
+    if (pk_update_package_url_is_safe($version, $download_url)) {
+        return $update;
+    }
+
+    $error = new WP_Error(
+        'puock-unsafe-update-package',
+        __('拒绝使用来源或版本不匹配的主题更新包。', PUOCK),
+        ['version' => $version, 'download_url' => $download_url]
+    );
+    do_action('puc_api_error', $error, $http_response, $download_url, PUOCK);
+    error_log('[puock-unsafe-update-package] ' . wp_json_encode([
+        'version' => $version,
+        'download_url' => substr($download_url, 0, 500),
+    ]));
+
+    return null;
+}
+
 //更新支持
 function pk_update()
 {
@@ -476,52 +728,108 @@ function pk_update()
     if (empty($check_period) || !is_numeric($check_period)) {
         $check_period = 6;
     }
-    $current_theme_dir_name = basename(dirname(__FILE__));
-    include('update-checker/update-checker.php');
-    switch ($update_server) {
-        case 'github':
-            {
-                $pkUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-                    'https://github.com/Licoy/wordpress-theme-puock',
-                    __FILE__,
-                    'unique-plugin-or-theme-slug',
-                    $check_period
-                );
-            }
-            break;
-        case 'cnpmjs':
-            {
-                $pkUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-                    'https://licoy.cn/go/puock-update.php?r=cnpmjs',
-                    __FILE__,
-                    'unique-plugin-or-theme-slug',
-                    $check_period
-                );
-            }
-            break;
-        case 'fastgit':
-            {
-                $pkUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-                    'https://licoy.cn/go/puock-update.php?r=fastgit',
-                    __FILE__,
-                    'unique-plugin-or-theme-slug',
-                    $check_period
-                );
-            }
-            break;
-        default:
-        {
-            $pkUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-                'https://licoy.cn/go/puock-update.php?r=worker',
-                __FILE__,
-                $current_theme_dir_name,
-                $check_period
-            );
-        }
+    if ($update_server === 'github') {
+        $pkUpdateChecker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+            'https://github.com/Licoy/wordpress-theme-puock',
+            __FILE__,
+            PUOCK,
+            $check_period
+        );
+        $vcs_api = $pkUpdateChecker->getVcsApi();
+        $vcs_api->enableReleaseAssets(
+            '/^Puock-V\d+\.\d+\.\d+\.zip$/D',
+            $vcs_api::REQUIRE_RELEASE_ASSETS
+        );
+    } else {
+        $pkUpdateChecker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+            'https://licoy.cn/go/puock-update.php?r=worker',
+            __FILE__,
+            PUOCK,
+            $check_period
+        );
     }
+
+    $pkUpdateChecker->addResultFilter('pk_filter_update_package');
 }
 
-if (is_admin()) {
-    // 在线更新支持
-    pk_update();
-}
+
+////WordPress 评论回复邮件通知代码 TODO 等待测试改进
+//function pk_comment_mail_notify($comment_id)
+//{
+//    $admin_notify = '1'; // admin 要不要收回复通知 ( '1'=要 ; '0'=不要 )
+//    $admin_email = get_bloginfo('admin_email');
+//    $blogname = wp_specialchars_decode(get_option('blogname'), ENT_QUOTES);
+//    $comment = get_comment($comment_id);
+//    $parent_id = $comment->comment_parent ? $comment->comment_parent : '';
+//    $spam_confirmed = $comment->comment_approved;
+//    global $wpdb;
+//    $comments_waiting = $wpdb->get_var("SELECT count(comment_ID) FROM $wpdb->comments WHERE comment_approved = '0'");
+//    if (($parent_id != '') && ($spam_confirmed != 'spam') && ($to != $admin_email)) {
+//        $wp_email = 'no-reply@' . preg_replace('#^www\.#', '', strtolower($_SERVER['SERVER_NAME']));
+//        $to = trim(get_comment($parent_id)->comment_author_email);
+//        $subject = '您在 [' . $blogname . ']' . ' 中的留言有了新回复！';
+//        $message = '
+//                  <div style="background-color:white;border-left: 2px solid #555555;box-shadow:0 1px 3px #AAAAAA;line-height:180%;padding:0 15px 12px;width:500px;margin:50px auto;color:#555555;font-family:"Source Sans Pro","Hiragino Sans GB","Microsoft Yahei",SimSun,Helvetica,Arial,Sans-serif,monospace;font-size:14px;">
+//                         <h2 style="border-bottom:1px solid #DDD;font-size:14px;font-weight:normal;padding:13px 0 10px 8px;">
+//                                    <span style="color: #409eff;font-weight: bold;">&gt; </span>
+//                                    您在 <a style="text-decoration:none; color:#409eff;font-weight:600;" href="' . home_url() . '">' . $blogname . '</a> 的留言有回复啦！
+//                           </h2>
+//                           <div style="font-size: 14px; color: #777; padding: 0 10px; margin-top: 18px;">
+//                                    <p><b>' . trim(get_comment($parent_id)->comment_author) . '</b> 同学，您曾在文章<b>《' . get_the_title($comment->comment_post_ID) . '》</b>上发表评论:</p>
+//                                    <p style="background: #F5F5F5; padding: 10px 15px; margin: 18px 0;">' . nl2br(strip_tags(get_comment($parent_id)->comment_content)) . '</p>
+//                                    <p>' . '<b>' . trim($comment->comment_author) . '</b>' . ' 给您的回复如下:</p>
+//                                    <p style="background: #F5F5F5; padding: 10px 15px; margin: 18px 0;">' . nl2br(strip_tags($comment->comment_content)) . '</p>
+//                                    <p>您可以点击 <a style="text-decoration:none; color:#409eff" href="' . htmlspecialchars(get_comment_link($parent_id)) . '">查看完整的回复內容</a>，也欢迎再次光临 <a style="text-decoration:none; color:#409eff"
+//                                    href="' . home_url() . '">' . $blogname . '</a>。祝您生活愉快！</p>
+//                                    <p style="padding-bottom: 15px;">(此邮件由系统自动发出,请勿直接回复!)</p>
+//                           </div>
+//                  </div>';
+//        $from = "From: \"" . get_option('blogname') . "\" <$wp_email>";
+//        $headers = "$from\nContent-Type: text/html; charset=" . get_option('blog_charset') . "\n";
+//        wp_mail($to, $subject, $message, $headers);
+//    }
+//    //文章有新评论时通知管理员
+//    if ($parent_id == '' && (trim($comment->comment_author_email) != trim($admin_email)) && ($spam_confirmed != 'spam') && ($comment->comment_approved != 0)) {
+//        $wp_email = '';
+//        $subject = '在「' . $blogname . '」的文章《' . get_the_title($comment->comment_post_ID) . '》一文有新的评论';
+//        $message = '
+//            <div style="background-color:white;border-left: 2px solid #555555;box-shadow:0 1px 3px #AAAAAA;line-height:180%;padding:0 15px 12px;width:500px;margin:50px auto;color:#555555;font-family:"Source Sans Pro","Hiragino Sans GB","Microsoft Yahei",SimSun,Helvetica,Arial,Sans-serif,monospace;font-size:14px;">
+//                     <h2 style="border-bottom:1px solid #DDD;font-size:14px;font-weight:normal;padding:13px 0 10px 8px;">
+//                              <span style="color: #409eff;font-weight: bold;">&gt; </span>
+//                              <a style="text-decoration:none;color: #409eff;" href="' . home_url() . '">' . $blogname . '</a> 博客有新的评论啦！
+//                     </h2>
+//                     <div style="padding:0 12px 0 12px;margin-top:18px;">
+//                              <p><b>' . $comment->comment_author . '</b> 同学在文章<b>《' . get_the_title($comment->comment_post_ID) . '》</b>上发表评论:</p>
+//                              <p style="background-color: #f5f5f5;border: 0px solid #DDD;padding: 10px 15px;margin:18px 0;">' . $comment->comment_content . '</p>
+//                              <p>您可以点击 <a style="text-decoration:none; color:#409eff" href="' . htmlspecialchars(get_comment_link($parent_id)) . '">查看完整的回复內容</a>，也欢迎再次光临 <a style="text-decoration:none; color:#409eff" href="' . home_url() . '">' . $blogname . '</a>。祝您生活愉快！</p>
+//                     </div>
+//            </div>';
+//        $headers = "Content-Type: text/html; charset=" . get_option('blog_charset') . "\n";
+//        wp_mail($admin_email, $subject, $message, $headers);
+//    }
+//    //评论需要审核时通知
+//    if ($parent_id == '' && (trim($comment->comment_author_email) != trim($admin_email)) && ($spam_confirmed != 'spam') && ($spam_confirmed != 'trash') && ($comment->comment_approved == 0)) {
+//        $wp_email = '';
+//        $subject = '在「' . $blogname . '」的文章《' . get_the_title($comment->comment_post_ID) . '》中有新的评论需要审核';
+//        $message = '
+//            <div style="background-color:white;border-left: 2px solid #555555;box-shadow:0 1px 3px #AAAAAA;line-height:180%;padding:0 15px 12px;width:500px;margin:50px auto;color:#555555;font-family:"Source Sans Pro","Hiragino Sans GB","Microsoft Yahei",SimSun,Helvetica,Arial,Sans-serif,monospace;font-size:14px;">
+//                     <h2 style="border-bottom:1px solid #DDD;font-size:14px;font-weight:normal;padding:13px 0 10px 8px;">
+//                              <span style="color: #409eff;font-weight: bold;">&gt; 「 </span>
+//                              <a style="text-decoration:none;color: #409eff;" href="' . home_url() . '">' . $blogname . '」</a> 中有一条评论等待您的审核
+//                     </h2>
+//                     <div style="padding:0 12px 0 12px;margin-top:18px;">
+//                              <p><b>' . $comment->comment_author . '</b> 同学在文章<b><a style="text-decoration:none;color: #409eff;" href="' . get_permalink($comment->comment_post_ID) . '">《' . get_the_title($comment->comment_post_ID) . '》</a></b>上发表评论:</p>
+//                              <p style="background-color: #f5f5f5;border: 0px solid #DDD;padding: 10px 15px;margin:18px 0;">' . $comment->comment_content . '</p>
+//                              <p><a style="text-decoration:none;color: #007017;" href="' . admin_url("comment.php?action=approve&c={$comment_id}#wpbody-content") . '">[批准评论]</a> | <a style="text-decoration:none;color: #b32d2e;" href="' . admin_url("comment.php?action=trash&c={$comment_id}#wpbody-content") . '">[移至回收站]</a>。您还可以：<a style="text-decoration:none; color:#b32d2e" href="' . admin_url("comment.php?action=delete&c={$comment_id}#wpbody-content") . '">永久删除评论</a> | <a style="text-decoration:none;color: #b32d2e;" href="' . admin_url("comment.php?action=spam&c={$comment_id}#wpbody-content") . '">标记为垃圾评论</a>
+//                              <p>当前有 ' . $comments_waiting . ' 条评论等待审核。请移步<a style="text-decoration:none;color: #409eff;" href="' . admin_url('edit-comments.php?comment_status=moderated#wpbody-content') . '">审核页面</a>来查看。</p>也欢迎再次光临 <a style="text-decoration:none; color:#409eff" href="' . home_url() . '">' . $blogname . '</a>。祝您生活愉快！</p>
+//                     </div>
+//            </div>';
+//        $headers = "Content-Type: text/html; charset=" . get_option('blog_charset') . "\n";
+//        wp_mail($admin_email, $subject, $message, $headers);
+//    }
+//}
+//
+//add_action('comment_post', 'pk_comment_mail_notify');
+
+// 在线更新支持
+pk_update();

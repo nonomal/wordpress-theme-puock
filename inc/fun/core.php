@@ -1,26 +1,23 @@
 <?php
 
-define('PUOCK_CUR_VER_STR', wp_get_theme()->get('Version'));
-define('PUOCK_CUR_VER', (float)PUOCK_CUR_VER_STR);
-define('PUOCK', 'puock');
-define('PUOCK_OPT', 'puock_options');
 
-$puock = 'Puock';
+use Puock\Theme\classes\PuockClassLoad;
 
 add_action('after_setup_theme', 'puock_theme_setup');
 function puock_theme_setup()
 {
-    load_theme_textdomain(PUOCK, get_template_directory() . '/languages');
+    load_theme_textdomain(PUOCK, PUOCK_ABS_DIR . '/languages');
 }
 
-if (is_dir(get_template_directory() . '/inc/puock')) {
-    if (file_exists(get_template_directory() . '/inc/puock/fun.php')) {
-        require get_template_directory() . '/inc/puock/fun.php';
+if (is_dir(PUOCK_ABS_DIR . '/inc/puock')) {
+    if (file_exists(PUOCK_ABS_DIR . '/inc/puock/fun.php')) {
+        require_once PUOCK_ABS_DIR . '/inc/puock/fun.php';
     }
 }
 
-function pk_ajax_resp($data = null, $msg = 'success', $code = 0)
+function pk_ajax_resp($data = null, $msg = '', $code = 0)
 {
+    header('Content-Type: application/json; charset=utf-8');
     return json_encode(array('data' => $data, 'msg' => $msg, 'code' => $code));
 }
 
@@ -29,24 +26,31 @@ function pk_ajax_resp_error($msg = 'fail', $data = null)
     return pk_ajax_resp($data, $msg, -1);
 }
 
-require get_template_directory() . '/inc/setting/options-framework.php';
-require get_template_directory() . '/inc/fun/comment-ajax.php';
-require get_template_directory() . '/inc/fun/widget.php';
-require get_template_directory() . '/inc/init.php';
-require get_template_directory() . '/inc/category-seo.php';
-require get_template_directory() . '/inc/fun/comment.php';
-require get_template_directory() . '/inc/fun/short-code.php';
-require get_template_directory() . '/inc/fun/opt.php';
-require get_template_directory() . '/inc/fun/post-meta.php';
-require get_template_directory() . '/inc/fun/sidebar.php';
-require get_template_directory() . '/inc/fun/post-tags.php';
-require get_template_directory() . '/inc/fun/comment-notify.php';
-require get_template_directory() . '/inc/user-agent-parse.php';
-require get_template_directory() . '/inc/phpqrcode.php';
-require get_template_directory() . '/inc/php-captcha.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/cache.php';
+require_once PUOCK_ABS_DIR . '/inc/setting/index.php';
+require_once PUOCK_ABS_DIR . '/inc/ext/init.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/ajax.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/mail.php';
+require_once PUOCK_ABS_DIR . '/inc/oauth/oauth.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/security.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/comment-ajax.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/widget.php';
+require_once PUOCK_ABS_DIR . '/inc/init.php';
+require_once PUOCK_ABS_DIR . '/inc/category-seo.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/comment.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/short-code.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/opt.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/post-meta.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/sidebar.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/post-tags.php';
+require_once PUOCK_ABS_DIR . '/inc/fun/comment-notify.php';
+require_once PUOCK_ABS_DIR . '/inc/user-agent-parse.php';
+require_once PUOCK_ABS_DIR . '/inc/phpqrcode.php';
+require_once PUOCK_ABS_DIR . '/inc/ajax/index.php';
 if (pk_is_checked('no_category')) {
-    require get_template_directory() . '/inc/no-category.php';
+    require_once PUOCK_ABS_DIR . '/inc/no-category.php';
 }
+$puock_class_load = new PuockClassLoad();
 
 /*Auth-Domains*/
 
@@ -57,37 +61,92 @@ if (pk_is_checked('html_page_permalink')) {
 add_filter('user_trailingslashit', 'add_init_trailingslashit', 10, 2);
 
 
-// 顶部添加自定义菜单
-function pk_toolbar_link($bar)
+function pk_open_session()
 {
+    session_start();
+}
+
+function pk_wclose_session()
+{
+    session_write_close();
+}
+
+function pk_session_call($function)
+{
+    pk_open_session();
+    try {
+        $function();
+    } finally {
+        session_write_close();
+    }
+}
+
+function pk_get_theme_option_url($to = '')
+{
+    return admin_url() . 'admin.php?page=puock-options&to=' . $to;
+}
+
+
+// 顶部添加自定义菜单
+function pk_toolbar_link(WP_Admin_Bar $bar)
+{
+    $menu_id = 'theme-quick-start';
+    $bar->add_node(array(
+        'id' => $menu_id,
+        'title' => '<i class="czs-paper-plane"></i>&nbsp;' . __('Puock Theme 快捷入口', PUOCK),
+        'href' => '#'
+    ));
     $bar->add_node(array(
         'id' => 'theme-setting',
-        'title' => '🎨 主题设置',
-        'href' => admin_url() . 'themes.php?page=options-framework'
+        'parent' => $menu_id,
+        'title' => '<i class="czs-setting" style="color:#9627e3"></i>&nbsp;' . __('主题设置', PUOCK),
+        'href' => pk_get_theme_option_url()
     ));
     $bar->add_node(array(
         'id' => 'theme-docs',
-        'title' => '📚 主题使用文档',
+        'parent' => $menu_id,
+        'title' => '<i class="czs-doc-file" style="color:#496cf9"></i>&nbsp;' . __('主题文档', PUOCK),
         'href' => 'https://licoy.cn/puock-doc.html',
         'meta' => array(
             'target' => 'blank'
         )
     ));
     $bar->add_node(array(
-        'id' => 'theme-qq-qun',
-        'title' => '🐧 主题交流QQ群',
+        'id' => 'theme-sponsor',
+        'parent' => $menu_id,
+        'title' => '<i class="czs-heart" style="color:#f54747"></i>&nbsp;' . __('赞助主题', PUOCK),
+        'href' => 'https://licoy.cn/puock-theme-sponsor.html',
+        'meta' => array(
+            'target' => 'blank'
+        )
+    ));
+    $bar->add_node(array(
+        'id' => 'theme-group',
+        'parent' => $menu_id,
+        'title' => '<i class="czs-weixin" style="color:#177b17"></i>&nbsp;' . __('主题交流群', PUOCK),
         'href' => 'https://licoy.cn/go/puock-update.php?r=qq_qun',
+        'meta' => array(
+            'target' => 'blank'
+        )
+    ));
+    $bar->add_node(array(
+        'id' => 'theme-github',
+        'parent' => $menu_id,
+        'title' => '<i class="czs-github-logo"></i>&nbsp;' . __('Github 开源主页', PUOCK),
+        'href' => 'https://github.com/Licoy/wordpress-theme-puock',
         'meta' => array(
             'target' => 'blank'
         )
     ));
 }
 
-add_action('admin_bar_menu', 'pk_toolbar_link', 999);
+if (is_user_logged_in() && current_user_can('manage_options')) {
+    add_action('admin_bar_menu', 'pk_toolbar_link', 999);
+}
 
 function pk_admin_scripts()
 {
-    wp_enqueue_script('puock-admin', get_stylesheet_directory_uri() . '/assets/dist/admin.min.js',
+    wp_enqueue_script('puock-admin', get_stylesheet_directory_uri() . '/assets/dist/js/admin.min.js',
         array(), PUOCK_CUR_VER_STR, true);
 }
 
@@ -110,18 +169,72 @@ function pk_is_pjax()
     return pk_is_checked('page_ajax_load', false);
 }
 
-//判断阅读数量是否需要增加并进行操作
-function the_views_add($post_ID, $count, $key, $ajax = false)
+function pk_view_dedupe_seconds(): int
 {
-    if (is_single() || is_page() || $ajax) {
-        if ($count == '') {
-            add_post_meta($post_ID, $key, '0');
-        } else {
-            update_post_meta($post_ID, $key, $count + 1);
-            $count++;
-        }
+    $hours = intval(pk_get_option('view_dedupe_hours', 24));
+    if ($hours <= 0) {
+        return 0;
     }
-    return $count;
+    return $hours * 3600;
+}
+
+function pk_view_dedupe_cookie_key($post_ID): string
+{
+    return 'pk_viewed_' . $post_ID;
+}
+
+function pk_has_view_dedupe_cookie($post_ID): bool
+{
+    $seconds = pk_view_dedupe_seconds();
+    if ($seconds <= 0) {
+        return false;
+    }
+    $key = pk_view_dedupe_cookie_key($post_ID);
+    return !empty($_COOKIE[$key]);
+}
+
+function pk_set_view_dedupe_cookie($post_ID): void
+{
+    $seconds = pk_view_dedupe_seconds();
+    if ($seconds <= 0) {
+        return;
+    }
+    $key = pk_view_dedupe_cookie_key($post_ID);
+    setcookie($key, '1', time() + $seconds, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true);
+    $_COOKIE[$key] = '1';
+}
+
+function pk_is_instantclick_prefetch(): bool
+{
+    $instant = $_SERVER['HTTP_X_INSTANTCLICK'] ?? $_SERVER['HTTP_X_INSTANT_CLICK'] ?? '';
+    if (!empty($instant) && strtolower($instant) === 'prefetch') {
+        return true;
+    }
+    $purpose = strtolower($_SERVER['HTTP_X_PURPOSE'] ?? ($_SERVER['HTTP_PURPOSE'] ?? ($_SERVER['HTTP_SEC_PURPOSE'] ?? '')));
+    return strpos($purpose, 'prefetch') !== false;
+}
+
+//判断阅读数量是否需要增加并进行操作
+if (!function_exists('the_views_add')) {
+    function the_views_add($post_ID, $count, $key, $ajax = false)
+    {
+        if (is_single() || is_page() || $ajax) {
+            if (pk_is_instantclick_prefetch()) {
+                return $count;
+            }
+            if (pk_has_view_dedupe_cookie($post_ID)) {
+                return $count;
+            }
+            if ($count == '') {
+                add_post_meta($post_ID, $key, '0');
+            } else {
+                update_post_meta($post_ID, $key, $count + 1);
+                $count++;
+            }
+            pk_set_view_dedupe_cookie($post_ID);
+        }
+        return $count;
+    }
 }
 
 //获取当前的阅读数量与自增
@@ -138,11 +251,11 @@ if (!function_exists('the_views')) {
             $count = 0;
         }
         $count = the_views_add($post_id, $count, $key, $ajax);
-        $count = number_format_i18n($count);
+        $count_view = number_format_i18n($count);
         if (!$echo) {
-            return $count;
+            return $count_view;
         }
-        echo $count;
+        echo $count_view;
     }
 }
 //异步请求浏览量
@@ -175,8 +288,24 @@ add_action('publish_post', 'set_views');
 function get_total_views()
 {
     global $wpdb;
-    return $wpdb->get_var("SELECT SUM(meta_value) FROM $wpdb->postmeta where meta_key='views'");
+    $views = pk_cache_get(PKC_TOTAL_VIEWS);
+    if (!$views) {
+        $views = $wpdb->get_var("SELECT SUM(meta_value) FROM $wpdb->postmeta where meta_key='views'");
+        pk_cache_set(PKC_TOTAL_VIEWS, $views);
+    }
+    return $views;
 }
+
+
+function pk_check_right_md5()
+{
+    global $pk_right_slug;
+    if (empty($pk_right_slug) || md5($pk_right_slug) != 'd8775b419146efc39dea7b0ab50c56d0') {
+        wp_die(base64_decode('UGxlYXNlIGZvbGxvdyB0aGUgb3BlbiBzb3VyY2UgcnVsZXMgYW5kIGRvIG5vdCBjaGFuZ2Ugb3IgZGVsZXRlIHRoZSBib3R0b20gY29weXJpZ2h0IQ=='));
+    }
+}
+
+add_action('init', 'pk_check_right_md5');
 
 
 /**
@@ -203,7 +332,9 @@ function pk_hide_sidebar($post_id = null)
 {
     global $post;
     if (pk_is_checked("hide_global_sidebar")) {
-        return true;
+        if (!(pk_is_checked("keep_single_sidebar") && is_singular('post'))) {
+            return true;
+        }
     }
     if (is_single() || is_page()) {
         if ($post_id == null) {
@@ -227,24 +358,66 @@ function pk_hide_sidebar_out($hide = '', $show = '', $post_id = null, $echo = tr
     echo $out;
 }
 
+//侧边栏检测数据
+function pk_sidebar_check_has($name)
+{
+    if (!dynamic_sidebar($name)) {
+        dynamic_sidebar('sidebar_not');
+    }
+}
+
 //获取链接对象，用于书籍推荐及其他页面使用
-function pk_get_wp_links($link_cats = '')
+function pk_get_wp_links($link_cats = '', $auto_all = false)
 {
     global $wpdb;
     if (empty($link_cats)) {
-        return null;
+        if (!$auto_all) {
+            return null;
+        }
+        $all_cats = get_all_category_id_row('link_category');
+        if (empty($all_cats)) {
+            return null;
+        }
+        $link_cats = array_map(function ($item) {
+            return $item['value'];
+        }, $all_cats);
+    }
+    if (is_array($link_cats)) {
+        $link_cats = implode(',', $link_cats);
     }
     $sql = "select links.*,terms.term_id,terms.name  from {$wpdb->links} as links
             LEFT JOIN (select * from {$wpdb->term_relationships} where term_taxonomy_id in ({$link_cats})) as relat on links.link_id = relat.object_id
             LEFT JOIN (selecT * from {$wpdb->terms} where term_id in ({$link_cats})) as terms on terms.term_id = relat.term_taxonomy_id
              where links.link_id in (relat.object_id) and links.link_visible='Y'";
+    $orderby_map = [
+        'link_id' => 'links.link_id',
+        'url' => 'links.link_url',
+        'name' => 'links.link_name',
+        'rating' => 'links.link_rating',
+        'length' => 'LENGTH(links.link_name)',
+        'rand' => 'RAND()',
+    ];
+    $orderby_key = pk_get_option('index_link_order_by', 'link_id');
+    $orderby_col = $orderby_map[$orderby_key] ?? 'links.link_id';
+    $order = strtoupper(pk_get_option('index_link_order', 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
+    $sql .= " ORDER BY terms.term_id ASC, {$orderby_col} {$order}";
     return $wpdb->get_results($sql);
 }
 
 //获取懒加载图片信息
 function pk_get_lazy_pl_img()
 {
-    return pk_get_static_url() . "/assets/img/z/load-tip.png";
+    $custom = trim(pk_get_option('lazy_placeholder_url', ''));
+    if (!empty($custom)) {
+        if (strpos($custom, 'http://') === 0 || strpos($custom, 'https://') === 0) {
+            return $custom;
+        }
+        if (substr($custom, 0, 1) !== '/') {
+            $custom = '/' . $custom;
+        }
+        return home_url() . $custom;
+    }
+    return pk_get_static_url() . "/assets/img/z/load.svg";
 }
 
 function pk_get_lazy_img_info($origin, $class = '', $width = null, $height = null, $thumbnail = true)
@@ -258,13 +431,11 @@ function pk_get_lazy_img_info($origin, $class = '', $width = null, $height = nul
             $out .= "class='{$class}' ";
         }
     } else {
+        $out = "src='" . pk_get_lazy_pl_img() . "' ";
+        $out .= "class='lazy " . $class . "' ";
         if ($thumbnail) {
-            $out = "src='" . pk_get_img_thumbnail_src(pk_get_lazy_pl_img(), $width, $height) . "' ";
-            $out .= "class='lazyload " . $class . "' ";
             $out .= "data-src='" . pk_get_img_thumbnail_src($origin, $width, $height) . "'";
         } else {
-            $out = "src='" . pk_get_lazy_pl_img() . "' ";
-            $out .= "class='lazyload " . $class . "' ";
             $out .= "data-src='" . $origin . "'";
         }
     }
@@ -280,12 +451,26 @@ if (pk_is_checked('basic_img_lazy_z')) {
     add_filter('the_content', 'pk_content_img_lazy');
 }
 //获取图片缩略图链接
-function pk_get_img_thumbnail_src($src, $width, $height)
+function pk_get_img_thumbnail_src($src, $width, $height, $args = array())
 {
     if ($width == null || $height == null) {
         return $src;
     }
-    return get_template_directory_uri() . "/timthumb.php?w={$width}&h={$height}&a=&zc=1&src=" . $src;
+    if (pk_is_checked('disable_timthumb')) {
+        return $src;
+    }
+    $src_path = wp_parse_url($src, PHP_URL_PATH);
+    $src_ext = strtolower(pathinfo($src_path ?: $src, PATHINFO_EXTENSION));
+    if ($src_ext === 'webp' && (!function_exists('imagecreatefromwebp') || !function_exists('imagewebp'))) {
+        return $src;
+    }
+    if ($src_ext === 'avif' && (!function_exists('imagecreatefromavif') || !function_exists('imageavif'))) {
+        return $src;
+    }
+    if (pk_is_checked('thumbnail_rewrite_open')) {
+        return home_url() . "/timthumb/w_{$width}/h_{$height}/q_90/zc_1/a_c/" . pk_safe_base64_encode($src) . ".png";
+    }
+    return PUOCK_ABS_URI . "/timthumb.php?w={$width}&h={$height}&a=c&zc=1&q=90&src=" . $src;
 }
 
 //获取文章样式是否是卡片式
@@ -294,199 +479,34 @@ function pk_post_style_list()
     return pk_get_option('post_style', 'list') == 'list';
 }
 
-function extra_user_profile_qq_oauth($user)
+function pk_cms_card_columns(): int
 {
-    $qq_oauth = get_the_author_meta('qq_oauth', $user->ID);
-    $oauth = pk_get_oauth_info();
-    $is_conn = true;
-    $href = null;
-    if (empty($oauth['qq_oauth_id']) || empty($oauth['qq_oauth_key'])) {
-        $is_conn = false;
-    } else {
-        $href = $oauth['oauth_url'];
-    }
-    ?>
-    <h3>第三方账号绑定</h3>
-    <table class="form-table">
-        <tr>
-            <th><label for="qq_oauth">QQ互联</label></th>
-            <td>
-                <?php if (empty($qq_oauth)): ?>
-                    <a href="<?php echo $href ?>" target="_blank" id="qq_oauth" <?php echo $is_conn ? '' : 'disabled' ?>
-                       class="button">立即去绑定</a>
-                <?php else: ?>
-                    <a id="qq_oauth" class="button" disabled>已绑定QQ</a>
-                <?php endif; ?>
-            </td>
-        </tr>
-    </table>
-<?php }
-
-//添加qq授权之后的回调请求
-function oauth_qq_redirect_ajax()
-{
-    $oauth = pk_get_oauth_info('qq', '', false);
-    $qq_oauth_id = $oauth['qq_oauth_id'];
-    $qq_oauth_key = $oauth['qq_oauth_key'];
-    $redirect = $oauth['oauth_redirect'];
-    if (empty($qq_oauth_id) || empty($qq_oauth_key)) {
-        oauth_qq_redirect_page(false, '站点未填写QQ互联授权信息');
-        return;
-    }
-    $state = $_GET['state'];
-    $from_redirect = $_GET['redirect'];
-    $state_session = $_SESSION['qq_oauth_state'];
-    $code = $_GET['code'];
-    if ($state !== $state_session || empty($code)) {
-        oauth_qq_redirect_page(false, '非法State - 授权请求');
-        return;
-    }
-    $access_url = "https://graph.qq.com/oauth2.0/token?grant_type=authorization_code&client_id={$qq_oauth_id}&client_secret={$qq_oauth_key}&code={$code}&redirect_uri={$redirect}";
-    $access_token_res = wp_remote_get($access_url);
-    $body = $access_token_res['body'];
-    $querys = get_path_query($body);
-    if (!isset($querys['access_token'])) {
-        oauth_qq_redirect_page(false, '获取access_token失败');
-        return;
-    }
-    $info_url = "https://graph.qq.com/oauth2.0/me?access_token=" . $querys['access_token'];
-    $info_res = wp_remote_get($info_url);
-    $info_body = str_replace('callback( ', '', $info_res['body']);
-    $info_body = str_replace(' );', '', $info_body);
-    if ($info = json_decode($info_body, true)) {
-        $openid = $info['openid'];
-        $user_info_url = "https://graph.qq.com/user/get_user_info?access_token={$querys['access_token']}&openid={$openid}&oauth_consumer_key={$qq_oauth_id}&format=json";
-        $user_info_res = wp_remote_get($user_info_url);
-        if ($user_info = json_decode($user_info_res['body'], true)) {
-            if (is_user_logged_in()) {
-                $user = wp_get_current_user();
-                update_user_meta($user->ID, "qq_oauth", $openid);
-                oauth_qq_redirect_page(true, '', $from_redirect);
-            } else {
-                $users = get_users(array('meta_key' => 'qq_oauth', 'meta_value' => $openid));
-                if (!$users || count($users) <= 0) {
-                    //不存在用户，先自动注册再登录
-                    $wp_create_nonce = wp_create_nonce($openid);
-                    $username = 'qq' . $wp_create_nonce;
-                    $password = wp_generate_password($length = 10);
-                    $user_data = array(
-                        'user_login' => 'qq' . wp_create_nonce($openid),
-                        'display_name' => $user_info['nickname'],
-                        'user_pass' => $password,
-                        'nickname' => $user_info['nickname'],
-                        'user_email' => '_p_' . $username . '@null.null'
-                    );
-                    $user_id = wp_insert_user($user_data);
-                    wp_signon(array("user_login" => $username, "user_password" => $password), true);
-                    update_user_meta($user_id, "qq_oauth", $openid);
-                    oauth_qq_redirect_page(true, '', $from_redirect);
-                } else {
-                    //存在，直接登录
-                    wp_set_auth_cookie($users[0]->ID);
-                    oauth_qq_redirect_page(true, '', $from_redirect);
-                }
-            }
-        } else {
-            oauth_qq_redirect_page(false, '获取用户信息失败');
-            return;
-        }
-    } else {
-        oauth_qq_redirect_page(false, '获取OPENID失败');
-        return;
+    $cols = (int)pk_get_option('cms_card_columns', 2);
+    if ($cols < 2 || $cols > 4) {
+        $cols = 2;
     }
 
+    // 仅在「文章列表」且「卡片风格」下生效（首页/分类/标签/作者/搜索/日期归档等）
+    if (pk_post_style_list()) {
+        return 2;
+    }
+
+    $is_post_list = is_home() || is_archive() || is_search();
+    if (!$is_post_list) {
+        return 2;
+    }
+
+    // 有侧边栏时最多 2 列（仅当全局侧边栏未被禁用）
+    if (!pk_is_checked('hide_global_sidebar') && $cols > 2) {
+        $cols = 2;
+    }
+
+    return $cols;
 }
 
-//授权返回页面回调
-function oauth_qq_redirect_page($success = true, $info = '', $from_redirect = '')
-{
-    if ($success) {
-        if (empty($from_redirect)) {
-            echo "<html><script>window.location=\"" . get_admin_url() . "\"</script></html>";
-        } else {
-            echo "<html><script>window.location=\"" . $from_redirect . "\"</script></html>";
-        }
-    } else {
-        $_SESSION['error_info'] = $info;
-        echo "<html><script>window.location=\"" . get_template_directory_uri() . "/error.php\"</script></html>";
-    }
-}
-
-function pk_get_oauth_info($type = 'qq', $redirect = '', $gen_state = true)
-{
-    $qq_open = pk_is_checked('oauth_qq');
-    $qq_oauth_id = pk_get_option('oauth_qq_id');
-    $qq_oauth_key = pk_get_option('oauth_qq_key');
-    $redirect = urlencode(admin_url() . 'admin-ajax.php?action=oauth_qq_redirect_ajax&redirect=' . $redirect);
-    if ($gen_state) {
-        $qq_oauth_state = md5(time() . mt_rand(0, 9) . mt_rand(0, 9) . mt_rand(0, 9));
-        $_SESSION['qq_oauth_state'] = $qq_oauth_state;
-    } else {
-        $qq_oauth_state = $_SESSION['qq_oauth_state'];
-    }
-    $auth_url = "https://graph.qq.com/oauth2.0/authorize?response_type=code&client_id={$qq_oauth_id}&redirect_uri={$redirect}&state=" . $qq_oauth_state;
-    return array(
-        'qq_open' => $qq_open,
-        'qq_oauth_id' => $qq_oauth_id,
-        'qq_oauth_key' => $qq_oauth_key,
-        'oauth_redirect' => $redirect,
-        'oauth_state' => $qq_oauth_state,
-        'oauth_url' => $auth_url,
-    );
-}
-
-function pk_oauth_url($type = 'qq', $redirect = '')
-{
-    if ($type == 'qq') {
-        $oauth = pk_get_oauth_info('qq', $redirect);
-        if (!$oauth['qq_open'] || empty($oauth['qq_oauth_id']) || empty($oauth['qq_oauth_key'])) {
-            return '#';
-        }
-        return $oauth['oauth_url'];
-    }
-}
-
-function pk_oauth_url_page_ajax($type = 'qq', $redirect = '')
-{
-    return admin_url() . "admin-ajax.php?action=pk_oauth_url_page_ajax_exec&type={$type}&redirect={$redirect}";
-}
-
-//执行第三方登录页面跳转
-function pk_oauth_url_page_ajax_exec()
-{
-    $type = $_GET['type'];
-    $redirect = $_GET['redirect'];
-    if ($type == 'qq') {
-        echo "<html><script>window.location=\"" . pk_oauth_url($type, $redirect) . "\"</script></html>";
-        wp_die();
-    }
-    oauth_qq_redirect_page(false, '无效授权请求', $redirect);
-}
-
-//登录页快捷按钮
-function pk_oauth_form()
-{
-    $out = "<div style='margin-bottom:10px'>";
-    if (pk_is_checked('oauth_qq')) {
-        $out .= '<a href="' . pk_oauth_url_page_ajax('qq', admin_url()) . '" class="button button-large">QQ登录</a>';
-    }
-    $out .= "</div>";
-    echo $out;
-}
-
-add_action('wp_ajax_nopriv_pk_oauth_url_page_ajax_exec', 'pk_oauth_url_page_ajax_exec');
-add_action('wp_ajax_pk_oauth_url_page_ajax_exec', 'pk_oauth_url_page_ajax_exec');
-if (pk_is_checked('oauth_qq')) {
-    add_action('wp_ajax_nopriv_oauth_qq_redirect_ajax', 'oauth_qq_redirect_ajax');
-    add_action('wp_ajax_oauth_qq_redirect_ajax', 'oauth_qq_redirect_ajax');
-    //添加用户QQ——OPENID字段
-    add_action('show_user_profile', 'extra_user_profile_qq_oauth');
-    add_action('edit_user_profile', 'extra_user_profile_qq_oauth');
-    add_action('login_form', 'pk_oauth_form');
-    add_action('register_form', 'pk_oauth_form');
-}
+//评论添加@功能
 if (pk_is_checked('comment_has_at')) {
-    add_filter('comment_text', 'pk_comment_add_at', 20, 2);
+    add_filter('comment_text', 'pk_comment_add_at', 10, 2);
 }
 //GrAvatar头像源切换
 if (pk_get_option('gravatar_url', 'wp') != 'wp') {
@@ -494,30 +514,58 @@ if (pk_get_option('gravatar_url', 'wp') != 'wp') {
     if ($type == 'cravatar') {
         add_filter('get_avatar', 'cr_avatar');
         add_filter('get_avatar_url', 'cr_avatar');
-    }
-    if ($type == 'cn') {
+    } else if ($type == 'loli') {
+        add_filter('get_avatar', 'loli_avatar');
+        add_filter('get_avatar_url', 'loli_avatar');
+    } else if ($type == 'cn') {
         add_filter('get_avatar', 'cn_avatar');
         add_filter('get_avatar_url', 'cn_avatar');
-    }
-    if ($type == 'cn_ssl') {
+    } else if ($type == 'cn_ssl') {
         add_filter('get_avatar', 'cn_ssl_avatar');
         add_filter('get_avatar_url', 'cn_ssl_avatar');
-    }
-    if ($type == 'loli_ssl') {
+    } else if ($type == 'loli_ssl') {
         add_filter('get_avatar', 'loli_ssl_avatar');
         add_filter('get_avatar_url', 'loli_ssl_avatar');
-    }
-    if ($type == 'v2ex') {
+    } else if ($type == 'v2ex') {
         add_filter('get_avatar', 'v2ex_ssl_avatar');
         add_filter('get_avatar_url', 'v2ex_ssl_avatar');
+    } else if ($type == 'custom') {
+        add_filter('get_avatar', 'pk_custom_avatar');
+        add_filter('get_avatar_url', 'pk_custom_avatar');
     }
 }
 //评论者链接
+function pk_get_comment_author_url_html($comment_ID = 0)
+{
+    global $comment;
+    $comment_obj = $comment_ID ? get_comment($comment_ID) : $comment;
+    $author = esc_html(get_comment_author($comment_ID));
+
+    if (empty($comment_obj)) {
+        return $author;
+    }
+
+    if (!empty($comment_obj->user_id)) {
+        $url = get_author_posts_url((int)$comment_obj->user_id);
+        $attr = '';
+    } else {
+        $url = get_comment_author_url($comment_ID);
+        $attr = ' target="_blank" rel="external nofollow"';
+        if (!empty($url) && pk_is_checked('comment_author_link_go', true)) {
+            $url = pk_go_link($url);
+        }
+    }
+
+    if (empty($url)) {
+        return $author;
+    }
+
+    return '<a' . $attr . ' href="' . esc_url($url) . '" class="url">' . $author . '</a>';
+}
+
 function pk_comment_author_url($comment_ID = 0)
 {
-    $url = get_comment_author_url($comment_ID);
-    $author = get_comment_author($comment_ID);
-    echo empty($url) ? $author : "<a target='_blank' href='" . pk_go_link($url) . "' rel='external nofollow' class='url'>$author</a>";
+    echo pk_get_comment_author_url_html($comment_ID);
 }
 
 //评论回复通知
@@ -529,15 +577,7 @@ if (pk_is_checked('comment_mail_notify')) {
 if (pk_is_checked('smtp_open')) {
     function mail_smtp_set($phpmailer)
     {
-        $phpmailer->From = pk_get_option('smtp_form', '');
-        $phpmailer->FromName = pk_get_option('smtp_form_n', '');
-        $phpmailer->Host = pk_get_option('smtp_host', '');
-        $phpmailer->Port = pk_get_option('smtp_port', '');
-        $phpmailer->SMTPSecure = pk_is_checked('smtp_ssl') ? 'ssl' : '';
-        $phpmailer->Username = pk_get_option('smtp_u', '');
-        $phpmailer->Password = pk_get_option('smtp_p', '');
-        $phpmailer->IsSMTP();
-        $phpmailer->SMTPAuth = true;
+        pk_smtp_apply_config($phpmailer, pk_smtp_get_option_config());
     }
 
     add_action('phpmailer_init', 'mail_smtp_set');
@@ -571,6 +611,85 @@ function login_protection()
 if (pk_is_checked('login_protection')) {
     add_action('login_enqueue_scripts', 'login_protection');
 }
+
+//后台注册验证码
+function pk_register_captcha_form()
+{
+    $vd_type = pk_get_option('vd_type', 'img');
+    if ($vd_type === 'img') {
+        ?>
+        <p>
+            <label for="register_captcha"><?php _e('验证码', PUOCK) ?></label>
+            <span style="display:flex;gap:5px;align-items:center">
+                <input type="text" name="register_captcha" id="register_captcha" class="input"
+                       maxlength="4" autocomplete="off" style="flex:1" />
+                <img style="cursor:pointer;height:30px"
+                     src="<?php echo esc_url(pk_captcha_url('register', 100, 30)) ?>"
+                     onclick="this.src=this.src.replace(/&t=\d+/,'')+'&t='+Date.now()"
+                     alt="<?php esc_attr_e('验证码', PUOCK) ?>" />
+            </span>
+        </p>
+        <?php
+    } elseif ($vd_type === 'turnstile') {
+        $site_key = pk_get_option('vd_turnstile_site_key', '');
+        if ($site_key) {
+            ?>
+            <div style="margin-bottom:16px;">
+                <div class="cf-turnstile" data-sitekey="<?php echo esc_attr($site_key) ?>"></div>
+            </div>
+            <?php
+        }
+    }
+}
+
+function pk_register_captcha_validate($errors, $sanitized_user_login, $user_email)
+{
+    $vd_type = pk_get_option('vd_type', 'img');
+    if ($vd_type === 'img') {
+        $captcha_val = isset($_POST['register_captcha']) ? sanitize_text_field($_POST['register_captcha']) : '';
+        if (empty($captcha_val) || !pk_captcha_validate('register', $captcha_val)) {
+            $errors->add('captcha_error', __('<strong>错误</strong>：验证码不正确', PUOCK));
+        }
+    } elseif ($vd_type === 'turnstile') {
+        $cf_token = isset($_POST['cf-turnstile-response']) ? sanitize_text_field($_POST['cf-turnstile-response']) : '';
+        if (empty($cf_token)) {
+            $errors->add('captcha_error', __('<strong>错误</strong>：请完成 Turnstile 验证', PUOCK));
+        } else {
+            $secret_key = pk_get_option('vd_turnstile_secret_key', '');
+            $response = wp_remote_post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+                'body' => [
+                    'secret' => $secret_key,
+                    'response' => $cf_token,
+                    'remoteip' => isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '',
+                ],
+            ]);
+            if (is_wp_error($response)) {
+                $errors->add('captcha_error', __('<strong>错误</strong>：验证服务请求失败', PUOCK));
+            } else {
+                $result = json_decode(wp_remote_retrieve_body($response), true);
+                if (empty($result['success'])) {
+                    $errors->add('captcha_error', __('<strong>错误</strong>：Turnstile 验证失败，请重试', PUOCK));
+                }
+            }
+        }
+    }
+    return $errors;
+}
+
+function pk_register_captcha_scripts()
+{
+    $vd_type = pk_get_option('vd_type', 'img');
+    if ($vd_type === 'turnstile') {
+        wp_enqueue_script('cf-turnstile', 'https://challenges.cloudflare.com/turnstile/v0/api.js', [], null, true);
+    }
+}
+
+if (pk_is_checked('vd_register')) {
+    add_action('register_form', 'pk_register_captcha_form');
+    add_filter('registration_errors', 'pk_register_captcha_validate', 10, 3);
+    add_action('login_enqueue_scripts', 'pk_register_captcha_scripts');
+}
+
 if (pk_is_checked('compress_html')) {
     add_action('get_header', 'wp_compress_html');
 }
@@ -581,7 +700,7 @@ function pk_baidu_submit($post_ID)
     $post_url = get_permalink($post_ID);
     $api_url = pk_get_option('baidu_submit_url');
     $resp = wp_remote_post($api_url, array('body' => $post_url, 'headers' => 'Content-Type: text/plain'));
-    $res = json_decode($resp['body'], true);
+    $res = @json_decode($resp['body'], true);
     if (isset($res['success'])) {
         add_post_meta($post_ID, 'baidu_submit_url_status', 1, true);
     }
@@ -625,14 +744,22 @@ function create_taxs($tax_slug, $hook_type, $tax_name)
     $labels_tax = array(
         'name' => $tax_name,
         'singular_name' => $tax_name,
-        'search_items' => '搜索' . $tax_name,
-        'all_items' => '所有' . $tax_name,
-        'parent_item' => '父级' . $tax_name,
-        'parent_item_colon' => '父级' . $tax_name,
-        'edit_item' => '编辑' . $tax_name,
-        'update_item' => '更新' . $tax_name,
-        'add_new_item' => '添加新' . $tax_name,
-        'new_item_name' => '新' . $tax_name . '名称',
+        /* translators: %s: taxonomy name */
+        'search_items' => sprintf(__('搜索%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'all_items' => sprintf(__('所有%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'parent_item' => sprintf(__('父级%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'parent_item_colon' => sprintf(__('父级%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'edit_item' => sprintf(__('编辑%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'update_item' => sprintf(__('更新%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'add_new_item' => sprintf(__('添加新%s', PUOCK), $tax_name),
+        /* translators: %s: taxonomy name */
+        'new_item_name' => sprintf(__('新%s名称', PUOCK), $tax_name),
         'menu_name' => $tax_name,
     );
 
@@ -652,34 +779,61 @@ function create_taxs($tax_slug, $hook_type, $tax_name)
 
 //注册菜单
 register_nav_menus(array(
-    'primary' => '主要菜单',
+    'primary' => __('主要菜单', PUOCK),
 ));
 
 //获取主题配置
-function pk_get_option($name, $default = false)
+function pk_get_option($name, $default = null)
 {
     $config = get_option(PUOCK_OPT);
     if ($config && isset($config[$name])) {
-        if (!empty($config[$name])) {
-            return $config[$name];
-        }
+        return $config[$name];
     }
     return $default;
+}
+
+//配置是否选择
+function pk_is_checked($name, $default = false)
+{
+    $val = pk_get_option($name);
+    if ($val === true || $val === 'true' || $val === 1 || $val === '1') {
+        return true;
+    }
+    if ($val === null) {
+        return $default;
+    }
+    return false;
+}
+
+//配置选择输出
+function pk_checked_out($name, $out = '', $default = 0)
+{
+    if (pk_is_checked($name, $default)) {
+        echo $out;
+    }
 }
 
 //主题模式
 function pk_theme_light()
 {
     if (isset($_COOKIE['mode'])) {
-        return $_COOKIE['mode'] == 'light';
+        return ($_COOKIE['mode'] == 'light') || $_COOKIE['mode'] == 'auto';
     }
     return pk_get_option('theme_mode', 'light') == 'light';
 }
 
-//配置是否选择
-function pk_is_checked($name, $default = 0)
+function pk_theme_mode()
 {
-    return pk_get_option($name, $default) == 1;
+    if (isset($_COOKIE['mode'])) {
+        return $_COOKIE['mode'];
+    }
+    return pk_get_option('theme_mode', 'light');
+}
+
+function pk_theme_dark_palette()
+{
+    $palette = pk_get_option('theme_dark_palette', 'bootstrap');
+    return in_array($palette, ['bootstrap', 'blueblack'], true) ? $palette : 'bootstrap';
 }
 
 //动画载入
@@ -715,9 +869,27 @@ function get_all_category_id($type = null)
     return $out;
 }
 
+//获取所有站点分类id
+function get_all_category_id_row($type = null)
+{
+    global $wpdb;
+    $sql = "SELECT term_id, name FROM $wpdb->terms";
+    if ($type != null) {
+        $sql .= " where term_id in (select term_id from $wpdb->term_taxonomy where taxonomy='{$type}')";
+    }
+    $cats = $wpdb->get_results($sql);
+    $result = [];
+    foreach ($cats as $cat) {
+        $result[] = ['label' => $cat->name, 'value' => $cat->term_id];
+    }
+    return $result;
+}
+
+
 //获取菜单数据
 function pk_get_main_menu($mobile = false)
 {
+    global $wp;
     $menus = get_nav_menu_object('primary');
     $out = $mobile ? "<ul class='puock-links t-md'>" : "<ul>";
     if ($menus && count($menus) > 0) {
@@ -726,17 +898,24 @@ function pk_get_main_menu($mobile = false)
     if (is_user_logged_in()) {
         $user = wp_get_current_user();
         $avatar = get_avatar_url($user->user_email);
-        $out .= '<li><a data-no-instant data-toggle="tooltip" title="用户中心" href="' . get_edit_profile_url() . '"><img alt="用户中心" src="' . $avatar . '" class="min-avatar"></a></li>';
+        $out .= '<li><a ' . (pk_is_user_center_theme() ? '' : 'data-no-instant') . ' data-bs-toggle="tooltip" title="' . esc_attr__('用户中心', PUOCK) . '" href="' . pk_user_center_url() . '"><img alt="' . esc_attr__('用户中心', PUOCK) . '" src="' . $avatar . '" class="min-avatar"></a></li>';
     } else {
-        if (pk_is_checked('show_login_url')) {
-            $out .= '<li><a data-no-instant data-toggle="tooltip" title="登入" href="' . wp_login_url() . '"><img alt="登入" src="' . get_avatar_url("no-login") . '" class="min-avatar"></a></li>';
+        if (pk_is_checked('open_quick_login')) {
+            $url = pk_ajax_url('pk_font_login_page', ['redirect' => home_url($wp->request)]);
+            $out .= '<li><a data-no-instant data-bs-toggle="tooltip" title="' . esc_attr__('登入', PUOCK) . '" data-title="' . esc_attr__('登入', PUOCK) . '" href="javascript:void(0)" class="pk-modal-toggle" data-once-load="true" data-url="' . $url . '"><i class="fa fa-right-to-bracket"></i></a></li>';
+        } elseif (pk_is_checked('user_center')) {
+            $url = wp_login_url(home_url($wp->request));
+            $out .= '<li><a data-no-instant data-bs-toggle="tooltip" title="' . esc_attr__('登入', PUOCK) . '" href="' . esc_url($url) . '"><i class="fa fa-right-to-bracket"></i></a></li>';
         }
     }
     if (!$mobile) {
         if (pk_is_checked('theme_mode_s')) {
-            $out .= '<li><a class="colorMode" data-toggle="tooltip" title="模式切换" href="javascript:void(0)"><i class="czs-moon-l"></i></a></li>';
+            $out .= '<li><a class="colorMode" data-bs-toggle="tooltip" title="' . esc_attr__('模式切换', PUOCK) . '" href="javascript:void(0)"><i class="fa fa-' . ((pk_theme_mode() === 'auto' ? 'circle-half-stroke' : (pk_theme_light() ? 'sun' : 'moon'))) . '"></i></a></li>';
         }
-        $out .= '<li><a class="search-modal-btn" data-toggle="tooltip" title="搜索" href="javascript:void(0)"><i class="czs-search-l"></i></a></li>';
+        if (pk_is_checked('cn_sc_tc_toggle')) {
+            $out .= '<li><a class="sc-tc-toggle" data-bs-toggle="tooltip" title="' . esc_attr__('简繁转换', PUOCK) . '" href="javascript:void(0)"><i class="fa fa-language"></i></a></li>';
+        }
+        $out .= '<li><a class="search-modal-btn" data-bs-toggle="tooltip" title="' . esc_attr__('搜索', PUOCK) . '" href="javascript:void(0)"><i class="fa fa-search"></i></a></li>';
     }
     $out .= '</ul>';
     return $out;
@@ -751,6 +930,9 @@ function get_nav_menu_object($location)
     }
     $menu_id = $locations[$location];
     $menu_object = wp_get_nav_menu_object($menu_id);
+    if (!$menu_object) {
+        return array();
+    }
     $menu_items = wp_get_nav_menu_items($menu_object->term_id);
     $menus = array();
     if ($menu_items == null || count($menu_items) == 0) {
@@ -784,20 +966,29 @@ function get_nav_menu_object($location)
 function pk_get_menu_obj_to_html($menus, &$out, $mobile = false, $dpath_cur = 1, $max_dpath = 2)
 {
     $child_class = $dpath_cur != 1 ? 'menu-item-child' : '';
+    // 全局默认打开方式（例如主题设置为新窗口），但优先使用每个菜单项自身的 target 设置
+    $default_target = pk_link_target(false);
     foreach ($menus as $menu) {
         $classes = join(" ", $menu->classes);
         $cur = $menu->current ? 'menu-current' : '';
         $out .= "<li id='menu-item-{$menu->ID}' class='menu-item-{$menu->ID} {$classes} {$child_class} {$cur}'>";
-        if (!$mobile) {
-            $out .= "<a href='{$menu->url}'>{$menu->title}";
+        // 计算当前菜单项应使用的 target 属性：当菜单项有设置时优先生效
+        $item_target = '';
+        if (!empty($menu->target)) {
+            $item_target = 'target="' . $menu->target . '"';
         } else {
-            $out .= '<span><a href="' . $menu->url . '">' . $menu->title . '</a>';
+            $item_target = $default_target;
+        }
+        if (!$mobile) {
+            $out .= "<a class='ww' data-color='auto' {$item_target} href='{$menu->url}'>{$menu->title}";
+        } else {
+            $out .= '<span><a ' . $item_target . ' href="' . $menu->url . '">' . $menu->title . '</a>';
         }
         if (count($menu->children) > 0) {
             if ($mobile) {
-                $out .= '<a href="#menu-sub-' . $menu->ID . '" data-toggle="collapse"><i class="czs-angle-down-l t-sm ml-1"></i></a>';
+                $out .= '<a href="#menu-sub-' . $menu->ID . '" data-bs-toggle="collapse"><i class="fa fa-chevron-down t-sm ms-1 menu-sub-icon"></i></a>';
             } else {
-                $out .= '<i class="czs-angle-down-l t-sm ml-1"></i>';
+                $out .= '<i class="fa fa-chevron-down t-sm ms-1 menu-sub-icon"></i>';
             }
         }
         if ($mobile) {
@@ -817,13 +1008,13 @@ function pk_get_menu_obj_to_html($menus, &$out, $mobile = false, $dpath_cur = 1,
 //获取分类的子集菜单
 function get_category_child($parentId)
 {
-    $child = get_categories("child_of={$parentId}&hide_empty=0");
+    $child = get_categories("parent={$parentId}&hide_empty=0");
     $list = array();
     foreach ($child as $child_item) {
-        array_push($list, array(
+        $list[] = array(
             'url' => get_category_link($child_item),
             'item' => $child_item
-        ));
+        );
     }
     return $list;
 }
@@ -833,25 +1024,44 @@ function pk_pre_post_set($query)
 {
     if ($query->is_home() && $query->is_main_query()) {
         if (pk_get_option('index_mode', '') == 'cms') {
-            $query->set('posts_per_page', pk_get_option('cms_show_new_num', 5));
+            $sort = pk_get_option('cms_new_sort', 'published');
+            $query->set('posts_per_page', pk_get_option('cms_show_new_num', 6));
+            if ($sort == 'published') {
+                $query->set('orderby', 'date');
+                $query->set('order', 'DESC');
+            } elseif ($sort == 'updated') {
+                $query->set('orderby', 'modified');
+                $query->set('order', 'DESC');
+            }
+            $exclude_cats = pk_get_option('cms_new_exclude_cats');
+            if (!empty($exclude_cats)) {
+                $cat_ids = is_array($exclude_cats) ? array_map('intval', $exclude_cats) : [intval($exclude_cats)];
+                $query->set('category__not_in', $cat_ids);
+            }
+        }
+    }
+    if ($query->is_category() && $query->is_main_query()) {
+        $cat_per_page = intval(pk_get_option('category_posts_per_page', 0));
+        if ($cat_per_page > 0) {
+            $query->set('posts_per_page', $cat_per_page);
         }
     }
 }
 
 add_action('pre_get_posts', 'pk_pre_post_set');
-//摘要长度控制
-function pk_chinese_excerpt($text, $len = 100)
+
+// 分类页置顶文章优先显示
+function pk_category_sticky_orderby($clauses, $query)
 {
-    $end_str = '';
-    if (strlen($text) > $len) {
-        $len -= 3;
-        $end_str = '...';
+    global $wpdb;
+    if ($query->is_category() && $query->is_main_query()) {
+        $clauses['join'] .= " LEFT JOIN {$wpdb->postmeta} AS pk_sticky ON ({$wpdb->posts}.ID = pk_sticky.post_id AND pk_sticky.meta_key = 'sticky_in_category' AND pk_sticky.meta_value = 'true')";
+        $clauses['orderby'] = "CASE WHEN pk_sticky.meta_value = 'true' THEN 0 ELSE 1 END ASC, " . $clauses['orderby'];
     }
-    $text = mb_substr($text, 0, $len);
-    return $text . $end_str;
+    return $clauses;
 }
 
-add_filter('the_excerpt', 'pk_chinese_excerpt');
+add_filter('posts_clauses', 'pk_category_sticky_orderby', 10, 2);
 
 //静态资源加载源的链接
 function pk_get_static_url()
@@ -874,7 +1084,7 @@ function pk_get_static_url()
             $url_pre = pk_get_option('custom_static_load_origin', '');
             break;
         default:
-            $url_pre = get_template_directory_uri();
+            $url_pre = PUOCK_ABS_URI;
     }
     return $url_pre;
 }
@@ -899,8 +1109,7 @@ function pk_chinese_format($content)
     $typesetting = new ChineseTypesetting();
     $content = $typesetting->insertSpace($content);
     $content = $typesetting->removeSpace($content);
-    $content = $typesetting->full2Half($content);
-    return $typesetting->fixPunctuation($content);
+    return $typesetting->full2Half($content);
 }
 
 if (pk_is_checked('chinese_format')) {
@@ -914,11 +1123,305 @@ function pk_get_thumbnail_allow_sites()
     $thumbnail_allows = trim(pk_get_option("thumbnail_allows", ''));
     if (!empty($thumbnail_allows)) {
         foreach (explode("\n", $thumbnail_allows) as $site) {
-            $site = trim($site);
+            $site = pk_normalize_thumbnail_allow_site($site);
             if (!empty($site)) {
-                $sites[] = $site;
+                $sites[$site] = $site;
             }
         }
     }
-    return $sites;
+    return array_values($sites);
+}
+
+function pk_normalize_thumbnail_allow_site($site)
+{
+    $site = trim((string)$site);
+    if ($site === '') {
+        return '';
+    }
+    $site = preg_replace('#^https?://#i', '', $site);
+    $site = explode('/', $site, 2)[0];
+    $site = preg_replace('/:\d+$/', '', $site);
+    $site = strtolower(trim($site));
+    if (!preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $site)) {
+        return '';
+    }
+    return $site;
+}
+
+//生成缩略图白名单文件名称
+function pk_get_thumbnail_allow_sites_filepath()
+{
+    return PUOCK_ABS_DIR . '/.tas.php';
+}
+
+//生成缩略图白名单文件
+function pk_generate_thumbnail_allow_sites_file()
+{
+    $sites = pk_get_thumbnail_allow_sites();
+    $template = "<?php\n\$ALLOWED_SITES = " . var_export($sites, true) . ";\n";
+    return file_put_contents(pk_get_thumbnail_allow_sites_filepath(), $template);
+}
+
+add_action('pk_option_updated', 'pk_generate_thumbnail_allow_sites_file', 10, 0);
+
+function pk_comment_proof_cookie_name(): string
+{
+    return 'puock_comment_proof_' . COOKIEHASH;
+}
+
+function pk_comment_proof_email_hash(string $email): string
+{
+    return hash('sha256', strtolower(trim($email)));
+}
+
+function pk_comment_proof_sign(string $payload): string
+{
+    return hash_hmac('sha256', $payload, wp_salt('auth'));
+}
+
+function pk_set_comment_proof_cookie_from_comment($comment)
+{
+    if (!($comment instanceof WP_Comment) || empty($comment->comment_author_email)) {
+        return;
+    }
+    $payload = implode('|', [
+        (int)$comment->comment_ID,
+        (int)$comment->comment_post_ID,
+        pk_comment_proof_email_hash($comment->comment_author_email),
+    ]);
+    $value = base64_encode($payload . '|' . pk_comment_proof_sign($payload));
+    $cookie_options = [
+        'expires' => time() + YEAR_IN_SECONDS,
+        'path' => COOKIEPATH ?: '/',
+        'secure' => is_ssl(),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ];
+    if (COOKIE_DOMAIN) {
+        $cookie_options['domain'] = COOKIE_DOMAIN;
+    }
+    setcookie(pk_comment_proof_cookie_name(), $value, $cookie_options);
+}
+
+function pk_get_comment_proof_cookie(): ?array
+{
+    $cookie_name = pk_comment_proof_cookie_name();
+    if (empty($_COOKIE[$cookie_name])) {
+        return null;
+    }
+    $decoded = base64_decode(wp_unslash($_COOKIE[$cookie_name]), true);
+    if (!$decoded) {
+        return null;
+    }
+    $parts = explode('|', $decoded);
+    if (count($parts) !== 4) {
+        return null;
+    }
+    [$comment_id, $post_id, $email_hash, $sig] = $parts;
+    $payload = implode('|', [(int)$comment_id, (int)$post_id, $email_hash]);
+    if (!hash_equals(pk_comment_proof_sign($payload), $sig)) {
+        return null;
+    }
+    return [
+        'comment_id' => (int)$comment_id,
+        'post_id' => (int)$post_id,
+        'email_hash' => $email_hash,
+    ];
+}
+
+add_action('set_comment_cookies', 'pk_set_comment_proof_cookie_from_comment', 10, 1);
+
+// get request model data
+function pk_get_req_data(array $model)
+{
+    $data = [];
+    foreach ($model as $key => $item) {
+        $val = trim($_REQUEST[$key] ?? '');
+        if (empty($val)) {
+            if ($item['required']) {
+                return ($item['name'] ?? $key) . __('不能为空', PUOCK);
+            }
+            if (isset($item['default'])) {
+                $data[$key] = $item['default'];
+            }
+            if ($item['empty'] ?? false) {
+                $data[$key] = '';
+            }
+        } else {
+            if ($item['remove_html'] ?? false) {
+                $val = esc_html($val);
+            }
+            $data[$key] = $val;
+        }
+    }
+    return $data;
+}
+
+function pk_get_ip_region_str($ip)
+{
+    $ip2_instance = $GLOBALS['ip2_region'] ?? false;
+    if (!$ip2_instance) {
+        $ip2_instance = new \Ip2Region();
+        $GLOBALS['ip2_region'] = $ip2_instance;
+    }
+    try {
+        $s = $ip2_instance->memorySearch($ip);
+    } catch (Exception $e) {
+        return __('未知', PUOCK);
+    }
+    if (strpos($s['region'], '内网IP') !== false) {
+        return __('内网IP', PUOCK);
+    }
+    $region = explode('|', $s['region']);
+    $res = '';
+    foreach ($region as $item) {
+        if (strpos($item, '0') === 0) {
+            continue;
+        }
+        $res .= $item;
+    }
+    return $res;
+}
+
+/**
+ * 极验验证码校验
+ * @throws Exception
+ */
+function pk_vd_gt_validate(array $args = null)
+{
+    if ($args == null) {
+        $args = [
+            'lot_number' => $_REQUEST['lot_number'] ?? '',
+            'captcha_output' => $_REQUEST['captcha_output'] ?? '',
+            'captcha_id' => $_REQUEST['captcha_id'] ?? '',
+            'pass_token' => $_REQUEST['pass_token'] ?? '',
+            'gen_time' => $_REQUEST['gen_time'] ?? '',
+        ];
+    }
+    $key = pk_get_option('vd_gt_key');
+    $args['sign_token'] = hash_hmac('sha256', $args['lot_number'], $key);
+    $result = wp_remote_request('https://gcaptcha4.geetest.com/validate?captcha_id=' . $args['captcha_id'], [
+        'method' => 'POST',
+        'body' => $args,
+        'timeout' => 5
+    ]);
+    if (is_wp_error($result)) {
+        throw new Exception(__('验证行为失败', PUOCK));
+    }
+    $result = json_decode($result['body'], true);
+    if ($result['status'] != 'success' || $result['result'] != 'success') {
+        throw new Exception(__('验证行为失败', PUOCK) . ': ' . $result['msg'] ?? $result['reason']);
+    }
+    return true;
+}
+
+function pk_get_user_center_entry(): string
+{
+    if (!pk_is_checked('user_center')) {
+        return 'wp';
+    }
+    $entry = pk_get_option('user_center_entry', '');
+    if (!empty($entry)) {
+        return $entry;
+    }
+    return 'theme';
+}
+
+function pk_is_user_center_theme(): bool
+{
+    return pk_is_checked('user_center') && pk_get_user_center_entry() === 'theme';
+}
+
+function pk_user_center_url(): string
+{
+    $entry = pk_get_user_center_entry();
+    if ($entry === 'theme') {
+        return home_url() . '/uc';
+    }
+    if ($entry === 'erphp') {
+        $url = trim(pk_get_option('erphpdown_user_center_url', '/erphpdown/user'));
+        if (empty($url)) {
+            return get_edit_profile_url();
+        }
+        if (strpos($url, 'http://') === 0 || strpos($url, 'https://') === 0) {
+            return $url;
+        }
+        if (substr($url, 0, 1) !== '/') {
+            $url = '/' . $url;
+        }
+        return home_url() . $url;
+    }
+    return get_edit_profile_url();
+}
+
+function pk_add_user_center_rewrite_rule()
+{
+    add_rewrite_rule('^uc/?([0-9A-Za-z_\-]+)?$', 'index.php?pagename=user-center&id=$matches[1]', 'top');
+}
+
+function pk_sync_user_center_rewrite_rule()
+{
+    pk_add_user_center_rewrite_rule();
+}
+
+function pk_rewrite_rule()
+{
+    // Always register /uc so disabling the theme user center can still redirect.
+    pk_add_user_center_rewrite_rule();
+}
+
+add_action('init', 'pk_rewrite_rule');
+
+function pk_flush_user_center_rewrite_on_option_updated($new_options)
+{
+    if (!is_array($new_options)) {
+        return;
+    }
+    $val = $new_options['user_center'] ?? null;
+    $enabled = ($val === true || $val === 'true' || $val === 1 || $val === '1') ? '1' : '0';
+    $entry = isset($new_options['user_center_entry']) ? (string)$new_options['user_center_entry'] : '';
+    $state = $enabled . '|' . $entry;
+    if (get_option('pk_user_center_rewrite_state') === $state) {
+        return;
+    }
+    pk_sync_user_center_rewrite_rule();
+    flush_rewrite_rules(false);
+    update_option('pk_user_center_rewrite_state', $state, false);
+}
+
+add_action('pk_option_updated', 'pk_flush_user_center_rewrite_on_option_updated');
+
+function pk_template_redirect()
+{
+    global $wp_query;
+    $page_name = $wp_query->get('pagename');
+    if ($page_name !== 'user-center') {
+        return;
+    }
+    if (!pk_is_user_center_theme()) {
+        if (is_user_logged_in()) {
+            wp_safe_redirect(get_edit_profile_url());
+        } else {
+            wp_safe_redirect(wp_login_url());
+        }
+        exit;
+    }
+    pk_load_template(PUOCK_ABS_DIR . '/inc/page/user-center.php');
+    exit;
+}
+
+add_action('template_redirect', 'pk_template_redirect');
+
+function pk_query_vars($vars)
+{
+    $vars[] = 'id';
+    return $vars;
+}
+
+add_filter('query_vars', 'pk_query_vars');
+
+function pk_load_template($_template_file, $require_once = true, $args = array())
+{
+    status_header(200);
+    load_template($_template_file, $require_once, $args);
 }

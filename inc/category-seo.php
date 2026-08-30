@@ -4,14 +4,14 @@
 function category_seo_field()
 {
     echo '<div class="form-field">  
-            <label for="seo-cat-keywords">SEO关键字</label>  
+                        <label for="seo-cat-keywords">' . esc_html__('SEO关键字', PUOCK) . '</label>  
             <input name="seo-cat-keywords" id="seo-cat-keywords" type="text" value="" size="40">  
-            <p>SEO关键字，多个关键字之间使用","分隔，默认显示该分类名称</p>  
+                        <p>' . esc_html__('SEO关键字，多个关键字之间使用","分隔，默认显示该分类名称', PUOCK) . '</p>  
           </div>';
     echo '<div class="form-field">  
-            <label for="seo-cat-desc">SEO描述</label>  
+                        <label for="seo-cat-desc">' . esc_html__('SEO描述', PUOCK) . '</label>  
             <input name="seo-cat-desc" id="seo-cat-desc" type="text" value="" size="40">  
-            <p>SEO描述，默认显示该分类名称</p>
+                        <p>' . esc_html__('SEO描述，默认显示该分类名称', PUOCK) . '</p>
           </div>';
 
 }
@@ -22,19 +22,19 @@ add_action('category_add_form_fields', 'category_seo_field', 10, 2);
 function edit_category_seo_field($tag)
 {
     echo '<tr class="form-field">  
-            <th scope="row"><label for="seo-cat-keywords">SEO关键字</label></th>  
+            <th scope="row"><label for="seo-cat-keywords">' . esc_html__('SEO关键字', PUOCK) . '</label></th>  
             <td>  
                 <input name="seo-cat-keywords" id="seo-cat-keywords" type="text" value="';
-    echo get_option('seo-cat-keywords-' . $tag->term_id) . '" size="40"/><br>  
-                <span class="seo-cat-keywords">SEO关键字，多个关键字之间使用","分隔，默认显示该分类名称</span>  
+    echo esc_attr(get_option('seo-cat-keywords-' . $tag->term_id)) . '" size="40"/><br>
+                <span class="seo-cat-keywords">' . esc_html__('SEO关键字，多个关键字之间使用","分隔，默认显示该分类名称', PUOCK) . '</span>  
             </td>  
         </tr>';
     echo '<tr class="form-field">  
-            <th scope="row"><label for="seo-cat-desc">SEO描述</label></th>  
+            <th scope="row"><label for="seo-cat-desc">' . esc_html__('SEO描述', PUOCK) . '</label></th>  
             <td>  
                 <input name="seo-cat-desc" id="seo-cat-desc" type="text" value="';
-    echo get_option('seo-cat-desc-' . $tag->term_id) . '" size="40"/><br>  
-                <span class="seo-cat-desc">SEO描述，默认显示该分类名称</span>  
+    echo esc_attr(get_option('seo-cat-desc-' . $tag->term_id)) . '" size="40"/><br>
+                <span class="seo-cat-desc">' . esc_html__('SEO描述，默认显示该分类名称', PUOCK) . '</span>  
             </td>  
         </tr>';
 }
@@ -48,8 +48,8 @@ function cat_seo_taxonomy_save_data($term_id)
         if (!current_user_can('manage_categories')) {
             return $term_id;
         }
-        update_option('seo-cat-keywords-' . $term_id, $_POST['seo-cat-keywords']);
-        update_option('seo-cat-desc-' . $term_id, $_POST['seo-cat-desc']);
+        update_option('seo-cat-keywords-' . $term_id, sanitize_text_field(wp_unslash($_POST['seo-cat-keywords'])));
+        update_option('seo-cat-desc-' . $term_id, sanitize_text_field(wp_unslash($_POST['seo-cat-desc'])));
     }
 }
 

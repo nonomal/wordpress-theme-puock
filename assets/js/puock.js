@@ -2,24 +2,53 @@ const puockGlobalData = {
     loads: {}
 }
 
+const TYPE_PRIMARY = "primary"
+const TYPE_WARNING = "warning"
+const TYPE_DANGER = "danger"
+const TYPE_SUCCESS = "success"
+const TYPE_INFO = "info"
+
 class Puock {
+
     data = {
         tag: 'puock',
+        pc:true,
         params: {
             home: null,
             use_post_menu: false,
             is_single: false,
             is_pjax: false,
             vd_comment: false,
+            vd_gt_id: null,
+            vd_type: null,
             main_lazy_img: false,
-            link_blank_open: false
+            link_blank_open: false,
+            async_view_id: null,
+            mode_switch: false,
+            async_view_generate_time: null,
+            off_img_viewer:false,
+            off_code_highlighting:false,
+            cn_sc_tc_toggle: false,
+            cn_sc_tc_default: 'sc'
         },
         comment: {
             loading: false,
             time: 5,
             val: null,
             replyId: null
-        }
+        },
+        instance: {},
+        modalStorage: {}
+    }
+
+    t(msg) {
+        const map = window.PUOCK_I18N || {};
+        return map[msg] || msg;
+    }
+
+    tf(msg, ...args) {
+        let index = 0;
+        return String(msg).replace(/%s/g, () => (args[index++] ?? ''));
     }
 
     // 全局一次加载或注册的事件
@@ -28,25 +57,37 @@ class Puock {
         $(document).on("click", ".fancybox", () => {
             return false;
         });
-        $(document).on("click", "#return-top-bottom>div", (e) => {
-            const to = $(this.ct(e)).attr("data-to");
-            const scroll_val = to === 'top' ? 0 : window.document.body.clientHeight;
-            $('html,body').animate({scrollTop: scroll_val}, 800)
+        $(document).on("click", "#rb-float-actions>div", (e) => {
+            const el = $(this.ct(e));
+            const to = el.data("to");
+            if (to) {
+                const scroll_val = to === 'top' ? 0 : window.document.body.clientHeight;
+                $('html,body').stop().animate({scrollTop: scroll_val}, 50)
+                return;
+            }
+            const toArea = el.data("to-area");
+            if (toArea) {
+                this.gotoArea(toArea)
+            }
         });
         $(document).on("click", ".colorMode", () => {
             this.modeChange(null, true);
         });
-        $(document).on("click", ".comment-captcha", (e) => {
+        $(document).on("click", ".sc-tc-toggle", () => {
+            this.toggleScTc();
+        });
+        $(document).on("click", ".captcha", (e) => {
             this.loadCommentCaptchaImage($(this.ct(e)))
         });
         if (this.data.params.is_pjax) {
             this.instanceClickLoad()
         }
+        this.initBasicDOMEvent()
         this.sidebarMenuEventInit()
-        this.eventOpenSearchBox()
+        this.searchInit()
         this.eventShareStart()
         this.modeInit();
-        this.registerMobileMenuEvent()
+        this.registerMobileMenu()
         this.registerModeChangeEvent()
         this.eventCommentPageChangeEvent()
         this.eventCommentPreSubmit()
@@ -54,27 +95,44 @@ class Puock {
         this.eventOpenCommentBox()
         this.eventCloseCommentBox()
         this.eventSendPostLike()
+        this.eventLoadMore()
         this.eventPostMainBoxResize()
+        this.swiperOnceEvent()
+        this.initModalToggle()
+        this.detectDevice()
+        window.addEventListener('resize', ()=>this.detectDevice());
+        layer.config({shade: 0.5})
+        console.log("\n %c Puock Theme %c https://github.com/Licoy/wordpress-theme-puock \n\n",
+            "color:#f1ab0e;background:#030307;padding:5px 0;border-top-left-radius:8px;border-bottom-left-radius:8px",
+            "background:#aa80ff;padding:5px 0;border-top-right-radius:8px;border-bottom-right-radius:8px");
     }
 
     pageInit() {
         this.loadParams()
-        this.loadCommentCaptchaImage(null)
         this.pageChangeInit()
         if (this.data.params.is_single) {
             if (this.data.params.use_post_menu) {
                 this.generatePostMenuHTML()
             }
-            this.generatePostQrcode()
         }
     }
 
     instanceClickLoad() {
         InstantClick.init('mousedown');
-        InstantClick.on('change', () => {
-            this.loadParams()
+        InstantClick.go = (url) => {
+            const link = document.createElement('a');
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+        }
+        InstantClick.on('change', (e) => {
+            this.loadParams();
             this.pageChangeInit()
         })
+        // InstantClick.on('receive',(url, body, title)=>{
+        //     console.log(body)
+        //     this.loadParams($(body))
+        // })
         this.loadCommentInfo();
     }
 
@@ -82,34 +140,212 @@ class Puock {
         return e.currentTarget
     }
 
+    detectDevice() {
+        const screenWidth = window.innerWidth;
+        this.data.pc = screenWidth >= 768
+    }
+
+    initBasicDOMEvent() {
+        // el show or hide event
+        $(document).on("click", ".toggle-el-show-hide", (e) => {
+            const el = $(this.ct(e));
+            const target = $(el.attr("data-target"));
+            const self = $(el.attr("data-self"));
+            const modalTitle = el.attr("data-modal-title");
+            if (target.hasClass("d-none")) {
+                self.addClass("d-none");
+                target.removeClass("d-none");
+            } else {
+                self.removeClass("d-none");
+                target.addClass("d-none");
+            }
+            if (modalTitle) {
+                el.closest(".modal").find(".modal-title").text(modalTitle);
+            }
+            this.renderTurnstileWidgets(target);
+        });
+        // form ajax submit
+        $(document).on("submit", ".ajax-form", (e) => {
+            e.preventDefault();
+            const form = $(this.ct(e));
+            const formEls = form.find(":input")
+            if (formEls.length === 0) {
+                this.toast(this.t('表单元素为空'), TYPE_DANGER)
+                return false;
+            }
+            for (let i = 0; i < formEls.length; i++) {
+                const el = $(formEls[i]);
+                if (el.attr("data-required") !== undefined && el.val() === "") {
+                    this.toast(el.attr("data-tip") || el.attr("placeholder"), TYPE_WARNING)
+                    return false;
+                }
+            }
+            const validateType = form.data("validate");
+            const startSubmit = (args = {}) => {
+                const url = form.attr("action");
+                const method = form.attr("method");
+                const data = this.parseFormData(form, args);
+                const dataType = "json";
+                const successTip = form.attr("data-success");
+                const errorTip = form.attr("data-error");
+                const loading = this.startLoading()
+                $.ajax({
+                    url, method, data, dataType,
+                    success: (res) => {
+                        this.stopLoading(loading)
+                        if (res.code === 0 || res.success) {
+                            this.toast(res.msg || successTip, TYPE_SUCCESS)
+                            if (form.data("no-reset") === undefined) {
+                                form.trigger("reset")
+                            }
+                            if (res.data) {
+                                const resData = res.data
+                                if (resData.action) {
+                                    setTimeout(() => {
+                                        switch (resData.action) {
+                                            case 'reload':
+                                                this.goUrl(window.location.href)
+                                                break
+                                        }
+                                    }, 500)
+                                }
+                            }
+                        } else {
+                            this.toast(res.msg || res.data || errorTip, TYPE_DANGER)
+                            this.loadCommentCaptchaImage(form, true)
+                            this.resetTurnstileWidgets(form)
+                        }
+                    },
+                    error: (e) => {
+                        this.stopLoading(loading)
+                        this.toast(this.tf(this.t('请求错误：%s'), e.statusText), TYPE_DANGER)
+                        this.loadCommentCaptchaImage(form, true)
+                        this.resetTurnstileWidgets(form)
+                    }
+                })
+            }
+            if (validateType === 'gt') {
+                this.gt.validate((code) => {
+                    startSubmit(code)
+                });
+            } else if (validateType === 'turnstile') {
+                if (form.find('.cf-turnstile').length && !$.trim(form.find('[name="cf-turnstile-response"]').val())) {
+                    this.toast(this.t('验证码不能为空'), TYPE_WARNING)
+                    return false;
+                }
+                startSubmit()
+            } else {
+                startSubmit()
+            }
+            return false;
+        })
+    }
+
     pageLinkBlankOpenInit() {
         if (this.data.params.link_blank_open) {
-            $("#post-main-content").find("a").each((_, item) => {
+            $(".entry-content").find("a").each((_, item) => {
                 $(item).attr('target', 'blank')
             })
         }
     }
 
-    loadCommentCaptchaImage(el) {
-        if (el == null) {
-            el = $(".comment-captcha");
+    loadCommentCaptchaImage(el, parent = false) {
+        if (parent) {
+            el.find(".captcha").each((_, item) => {
+                this.loadCommentCaptchaImage($(item))
+            })
+        } else {
+            const url = el.attr("src") + '&t=' + (new Date()).getTime()
+            el.attr("src", url)
+            el.parent().parent().find(".captcha-input").each((_, item) => {
+                $(item).val("")
+            })
         }
-        el.attr("src", el.attr("data-path") + '&t=' + (new Date()).getTime())
     }
 
-    eventOpenSearchBox() {
-        $(document).on("click", ".search-modal-btn", () => {
+    searchInit() {
+        const toggle = () => {
             const search = $("#search");
             const open = search.attr("data-open") === "true";
             let tag = open ? 'Out' : 'In';
             search.attr("class", "animated fade" + tag + "Left");
             $("#search-backdrop").attr("class", "modal-backdrop animated fade" + tag + "Right");
             search.attr("data-open", !open);
+            if (!open) {
+                search.find("input").focus();
+            }
+        }
+        $(document).on("click", ".search-modal-btn", () => {
+            toggle();
         });
+        $(document).on("click", "#search-backdrop", () => {
+            toggle();
+        })
+        $(document).on("submit", ".global-search-form", (e) => {
+            e.preventDefault();
+            const el = $(this.ct(e));
+            this.goUrl(el.attr("action") + "/?" + el.serialize())
+        })
+    }
+
+    goUrl(url) {
+        const bypassPjax = (
+            url.indexOf('/wp-login.php') !== -1 ||
+            url.indexOf('/wp-admin') !== -1
+        );
+        if (this.data.params.is_pjax && !bypassPjax) {
+            InstantClick.go(url)
+        } else {
+            window.location.href = url
+        }
+    }
+
+    gt = {
+        validate: (success = undefined) => {
+            const captcha = this.data.instance.gt
+            if (!captcha || typeof captcha.showCaptcha !== 'function') {
+                this.toast(this.t('验证码不能为空'), TYPE_WARNING)
+                return
+            }
+            this.data.instance.gt_callback = success
+            captcha.showCaptcha();
+        }
+    }
+
+    validateInit() {
+        if (this.data.params.vd_type === 'gt') {
+            initGeetest4({
+                captchaId: this.data.params.vd_gt_id,
+                product: 'bind',
+            }, (captchaObj) => {
+                this.data.instance.gt = captchaObj;
+                captchaObj.onSuccess(() => {
+                    const code = this.data.instance.gt.getValidate();
+                    this.data.instance.gt_callback && this.data.instance.gt_callback(code)
+                })
+            });
+        }
+    }
+
+    rippleInit() {
+        const args = {
+            debug: false,
+            on: 'mousedown',
+            opacity: 0.4,
+            color: "var(--pk-c-light)",
+            multi: false,
+            duration: 0.6,
+            rate: function (pxPerSecond) {
+                return pxPerSecond;
+            },
+            easing: 'linear'
+        }
+        jQuery.ripple(".btn", args);
+        jQuery.ripple(".ww", args);
     }
 
     eventShareStart() {
-        $(document).on("click", ".share-to>div", (e) => {
+        $(document).on("click", ".share-to", (e) => {
             const id = $(this.ct(e)).attr("data-id");
             if (id === 'wx') return;
             const url = window.location.href;
@@ -130,57 +366,96 @@ class Puock {
                     to = 'https://www.facebook.com/sharer.php?u' + url;
                     break;
             }
-            window.open(to, '_blank');
+            if (to) window.open(to, '_blank');
         });
     }
 
     sidebarMenuEventInit() {
-        $(document).on("touchend", "#post-menu-state", (e) => {
+        let currentOpenSubMenu = null;
+        $(document).on("touchend", ".post-menu-toggle", (e) => {
             e.preventDefault();
             this.toggleMenu();
         });
-        $(document).on("click", "#post-menu-state", () => {
+        $(document).on("click", ".post-menu-toggle", () => {
             this.toggleMenu();
+        });
+        $(document).on("click", ".post-menu-item", (e) => {
+            const el = $(this.ct(e))
+            const id = el.attr("data-id")
+            if (currentOpenSubMenu) {
+                const parentUl = el.parents("ul")
+                let curClass = "post-menu-sub-" + currentOpenSubMenu
+                while (true) {
+                    if (typeof (curClass) === "undefined") {
+                        break
+                    }
+                    const currentMenu = $("." + curClass)
+                    const classStr = currentMenu.attr("class")
+                    const und = typeof (classStr) == "undefined"
+                    if (und || parentUl.attr("class") === currentMenu.attr("class")) {
+                        break;
+                    } else {
+                        currentMenu.hide();
+                        curClass = currentMenu.parents("ul").attr("class");
+                    }
+                }
+            }
+            const subMenu = $(".post-menu-sub-" + id)
+            if (subMenu.length > 0) {
+                subMenu.show()
+                currentOpenSubMenu = id
+            }
         });
         $(document).on("click", ".pk-menu-to", (e) => {
             const to = $(this.ct(e)).attr("href");
             const headerHeight = $("#header").innerHeight();
-            $("html, body").animate({
+            $("html, body").stop().animate({
                 scrollTop: ($(to).offset().top - headerHeight - 10) + "px"
             }, {
-                duration: 500,
+                duration: 50,
                 easing: "swing"
             });
+            if(!this.data.pc){
+                this.toggleMenu()
+            }
             return false;
         });
     }
 
     toggleMenu() {
-        const el = $("#post-menu-state")
+        const menuContainer = $("#post-menus");
+        const menuButton = $("#post-menu-state");
         const className = "data-open";
-        const open = el.hasClass(className);
-        const content = $("#post-menu-content");
-        if (open) {
-            content.hide();
-            el.removeClass(className);
+        const isOpen = menuButton.hasClass(className);
+        
+        if (isOpen) {
+            // 关闭菜单
+            menuContainer.removeClass("show");
+            menuButton.removeClass(className);
         } else {
-            content.show();
-            el.addClass(className);
+            // 打开菜单
+            menuContainer.addClass("show");
+            menuButton.addClass(className);
         }
     }
 
-    lazyLoadInit(el = '.lazyload') {
-        if (window.LazyLoad !== undefined) {
-            new window.LazyLoad(document.querySelectorAll([el, "[data-lazy=true]"]), {
-                root: null,
-                rootMargin: "0px",
-                threshold: 0
+    lazyLoadInit(parent = null, el = '.lazy') {
+        if (window.lozad) {
+            const observer = lozad([el, 'img[data-lazy="true"]'], {
+                rootMargin: '10px 0px',
+                threshold: 0.1,
+                enableAutoReload: true,
+                load: (el) => {
+                    el.classList.add('loaded');
+                    el.src = el.getAttribute('data-src');
+                }
             });
+            observer.observe();
         }
     }
 
     loadParams() {
-        this.data.params = JSON.parse($("meta[name='puock-params']").attr("content"))
+        this.data.params = puock_metas;
         this.data.commentVd = this.data.params.vd_comment === 'on';
     }
 
@@ -192,47 +467,150 @@ class Puock {
         });
     }
 
+    tooltipInit(el = $("[data-bs-toggle=\"tooltip\"]")) {
+        [...el].map(tooltipTriggerEl => {
+            new bootstrap.Tooltip(tooltipTriggerEl, {
+                placement: 'bottom', trigger: 'hover'
+            })
+        })
+    }
+
     pageChangeInit() {
         this.initReadProgress()
         this.modeInit();
+        this.scTcInit();
         this.loadCommentInfo();
         this.katexParse();
         this.initCodeHighlight();
         this.pageLinkBlankOpenInit()
-        this.loadCommentCaptchaImage(null);
-        this.generatePostQrcode();
         this.initGithubCard();
         this.keyUpHandle();
+        this.loadHitokoto();
+        this.asyncCacheViews();
+        this.swiperInit();
+        this.validateInit();
+        this.rippleInit();
         if (this.data.params.use_post_menu) {
             this.generatePostMenuHTML()
         }
-        $('[data-toggle="tooltip"]').tooltip({placement: 'auto', trigger: 'hover'});
-        $("#post-main .entry-content").viewer({
-            navbar: false,
-            url: this.data.params.main_lazy_img ? 'data-src' : 'src'
-        });
-        new ClipboardJS('.copy-post-link', {
-            text: () => {
-                const $copyEl = $(".copy-post-link");
-                $copyEl.find('span').html("已复制");
-                $copyEl.attr("disabled", true);
-                setTimeout(() => {
-                    $copyEl.find('span').html("复制链接");
-                    $copyEl.attr("disabled", false);
-                }, 3000);
-                return location.href;
+        this.tooltipInit()
+        if(!this.data.params.off_img_viewer){
+            const getViewerUrl = (image) => {
+                const img = $(image);
+                const link = img.closest('a');
+                const href = link.attr('href');
+                if (href && this.isImageUrl(href)) {
+                    return href;
+                }
+                const dataSrc = img.attr('data-src');
+                const src = img.attr('src');
+                return this.data.params.main_lazy_img ? (dataSrc || src) : (src || dataSrc);
             }
+            jQuery(".entry-content").viewer({
+                navbar: true,
+                url: getViewerUrl,
+                filter: (image) => this.isViewerImage(image)
+            });
+            $(document).off("click.pkImageLink").on("click.pkImageLink", ".entry-content a", (e) => {
+                const link = $(this.ct(e));
+                if (e.originalEvent && e.originalEvent.puockImageLinkTrigger) {
+                    e.preventDefault();
+                    return;
+                }
+                const img = link.find("img").filter((_, image) => this.isViewerImage(image));
+                if (img.length === 0) {
+                    return;
+                }
+                const href = link.attr("href");
+                if (!this.isImageUrl(href)) {
+                    return;
+                }
+                e.preventDefault();
+                if ($(e.target).is("img")) {
+                    return;
+                }
+                const imageClick = new MouseEvent("click", {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                imageClick.puockImageLinkTrigger = true;
+                img[0].dispatchEvent(imageClick);
+            });
+        }else{
+            $(document).off("click.pkImageLink");
+        }
+        const cp = new ClipboardJS('.pk-copy', {
+            text: (trigger) => {
+                const t = $(trigger)
+                let input = t.attr("data-cp-input")
+                let el = t.attr("data-cp-el")
+                let val = t.attr("data-cp-val")
+                let func = t.attr("data-cp-func")
+                let text;
+                if(typeof func !=="undefined"){
+                    text = window[func](t)
+                }else if (typeof val !== "undefined") {
+                    text = val
+                } else if (typeof input !== "undefined") {
+                    text = $(input).val()
+                } else if (typeof el !== "undefined") {
+                    text = $(el).text()
+                } else {
+                    text = t.text()
+                }
+                return text;
+            },
         });
+        cp.on("success", (e) => {
+            let name = $(e.trigger).attr('data-cp-title') || "";
+            this.toast(this.tf(this.t('复制%s成功'), name))
+        })
+        cp.on("error", (e) => {
+            let name = $(e.trigger).attr('data-cp-title') || "";
+            this.toast(this.tf(this.t('复制%s失败'), name), TYPE_DANGER)
+        })
         this.lazyLoadInit()
+        $('#post-main, #sidebar').theiaStickySidebar({
+            additionalMarginTop: 20
+        });
     }
 
 
     getPostMenuStructure() {
         let res = []
+        let index = 0;
         for (let item of $(".entry-content").find('h1,h2,h3,h4,h5,h6')) {
-            res.push({name: $(item).text().trim(), level: item.tagName.toLowerCase(), id: $(item).attr("id")})
+            const el = $(item);
+            let id = el.attr("id");
+            if (!id) {
+                const text = el.text().trim().toLowerCase();
+                const base = text
+                    .replace(/\s+/g, '-')
+                    .replace(/[^\w\u4e00-\u9fa5\-]/g, '');
+                id = `pk-menu-${base || 'section'}-${index}`;
+                el.attr("id", id);
+            }
+            res.push({name: el.text().trim(), level: item.tagName.toLowerCase(), id})
+            index++;
         }
         return res
+    }
+
+    isImageUrl(url) {
+        if (!url) {
+            return false;
+        }
+        return /\.(jpe?g|png|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+    }
+
+    isViewerImage(image) {
+        const img = $(image);
+        const src = img.attr("src") || img.attr("data-src") || "";
+        return !img.is(".wp-smiley, .emoji, .smiley-img")
+            && img.closest(".smiley-item").length === 0
+            && src.indexOf("/assets/img/smiley/") === -1
+            && src.indexOf("/wp-includes/images/smilies/") === -1;
     }
 
     generatePostMenuHTML() {
@@ -240,47 +618,176 @@ class Puock {
         if (menus.length > 0) {
             let result = "<ul>";
             if (menus.length > 0) {
-                let heightLevel = 6;
-                for (let i = 0; i < menus.length; i++) {
-                    const level = parseInt(menus[i].level[1]);
-                    if (level < heightLevel) {
-                        heightLevel = level;
-                    }
+                const finalMenus = []
+                let maxLevel = 6;
+                const initChildren = (item) => {
+                    item.children = []
+                    return item
                 }
-                for (let i = 0; i < menus.length; i++) {
-                    const m = menus[i];
-                    let pl = 0;
-                    const level = parseInt(m.level[1]);
-                    if (level > heightLevel) {
-                        pl = (level - heightLevel) * 10;
+                const getLevel = (item) => {
+                    item.levelInt = parseInt(item.level.replace("h", ""))
+                    if (item.levelInt < maxLevel) {
+                        maxLevel = item.levelInt
                     }
-                    result += `<li style='padding-left:${pl}px' class='t-line-1'><i class='czs-angle-right-l t-sm c-sub mr-1'></i><a class='pk-menu-to a-link t-w-400 t-md' href='#${m.id}'>${m.name}</a></li>`;
+                    return item.levelInt
                 }
+                const firstMenu = initChildren(menus[0])
+                const firstLevel = getLevel(firstMenu)
+                let loadIndex = 0;
+                const eqLevelFn = (unMenu, parentMen) => {
+                    const nextUnMenu = loadMenu(unMenu, parentMen)
+                    if (nextUnMenu != null) {
+                        if (getLevel(nextUnMenu) === getLevel(unMenu)) {
+                            return eqLevelFn(nextUnMenu, parentMen)
+                        }
+                    }
+                    return nextUnMenu;
+                }
+                const loadMenu = (menu, parentMenu) => {
+                    if (loadIndex >= menus.length - 1) {
+                        return null;
+                    }
+                    const nextIndex = ++loadIndex;
+                    const nextMenu = initChildren(menus[nextIndex])
+                    const nowLevel = getLevel(menu)
+                    const nextLevel = getLevel(nextMenu)
+                    let unknownMenu = null;
+                    if (nextLevel === firstLevel) {
+                        finalMenus.push(nextMenu)
+                        unknownMenu = loadMenu(nextMenu, null)
+                    } else if (nextLevel > nowLevel) {
+                        menu.children.push(nextMenu)
+                        unknownMenu = loadMenu(nextMenu, menu)
+                    } else if (nextLevel === nowLevel && parentMenu != null) {
+                        parentMenu.children.push(nextMenu)
+                        unknownMenu = loadMenu(nextMenu, parentMenu)
+                    } else {
+                        return nextMenu
+                    }
+                    if (unknownMenu != null) {
+                        const unknownLevel = getLevel(unknownMenu)
+                        if (unknownLevel === nowLevel) {
+                            parentMenu.children.push(unknownMenu)
+                            unknownMenu = eqLevelFn(unknownMenu, parentMenu)
+                        }
+                    }
+                    return unknownMenu
+                }
+                finalMenus.push(firstMenu)
+                while (true) {
+                    const unknownMenu = loadMenu(firstMenu, null)
+                    if (unknownMenu == null) {
+                        break
+                    }
+                    loadMenu(unknownMenu, null)
+                }
+                let menuIndex = 0;
+                const outHtml = (item, parent) => {
+                    ++menuIndex;
+                    const id = menuIndex;
+                    const pl = (item.levelInt - maxLevel) * 10
+                    let out = `<li data-level="${item.levelInt}" style='padding-left:${pl}px'>`
+                    out += `<a class='pk-menu-to a-link t-w-400 t-md post-menu-item' data-parent="${parent}" data-id="${id}" href='#${item.id}'><i class='fa ${item.children.length > 0 ? 'fa-angle-right' : 'fa-file-invoice'} t-sm c-sub me-1'></i> ${item.name}</a>`
+                    if (item.children.length > 0) {
+                        out += `<ul class="post-menu-sub-${id}" data-parent="${parent + 1}">`
+                        for (let child of item.children) {
+                            out += outHtml(child, id)
+                        }
+                        out += `</ul>`
+                    }
+                    out += "</li>"
+                    return out;
+                }
+                finalMenus.forEach(item => {
+                    result += outHtml(item, menuIndex)
+                })
             }
             result += "</ul>"
-            $("#post-menu-content").html(result)
-        } else {
-            $("#post-menus").remove()
+            $("#post-menu-content-items").html(result);
+            $(".post-menus-box").show();
+            if (this.data.params.use_post_menu_open) {
+                this.toggleMenu();
+                $("[class^=post-menu-sub]").show();
+            }
         }
     }
 
-    initCodeHighlight() {
+    initCodeHighlight(fullChange = true, bodyEl="body") {
+        if(this.data.params.off_code_highlighting){
+            return
+        }
         if (window.hljs !== undefined) {
             window.hljs.configure({ignoreUnescapedHTML: true})
-            document.querySelectorAll('pre').forEach((block) => {
-                window.hljs.highlightBlock(block);
-                window.hljs.lineNumbersBlock(block);
+            $(bodyEl).find("pre").each((index, block) => {
+                const el = $(block);
+                const codeChildClass = el.children("code") ? el.children("code").attr("class") : undefined;
+                if (codeChildClass) {
+                    if (codeChildClass.indexOf("katex") !== -1 || codeChildClass.indexOf("latex") !== -1 || codeChildClass.indexOf("flowchart") !== -1
+                        || codeChildClass.indexOf("flow") !== -1 || codeChildClass.indexOf("seq") !== -1 || codeChildClass.indexOf("math") !== -1) {
+                        return;
+                    }
+                }
+                if (!el.attr("id")) {
+                    const itemId = "hljs-item-" + index;
+                    el.attr("id", itemId);
+                    // 工具栏：红绿灯 + 自动换行按钮 + 复制按钮
+                    el.before(`<div class='pk-code-tools' data-pre-id='${itemId}'>
+                        <div class='dot'><i></i><i></i><i></i></div>
+                        <div class='actions'>
+                            <div class='pk-code-action pk-code-wrap' data-target='${itemId}' title='${this.t('切换自动换行')}'>
+                                <i class='fa fa-align-left'></i>
+                            </div>
+                            <div class='pk-code-action pk-code-copy' data-clipboard-target='#${itemId}' title='${this.t('复制代码')}'>
+                                <i class='fa fa-copy'></i>
+                            </div>
+                        </div>
+                    </div>`);
+                    window.hljs.highlightBlock(block);
+                    window.hljs.lineNumbersBlock(block);
+                }
             });
+            if (fullChange) {
+                // 复制功能
+                const cp = new ClipboardJS('.pk-code-copy', {
+                    text: (trigger) => {
+                        const targetId = $(trigger).attr("data-clipboard-target");
+                        const codeEl = $(targetId).find("code");
+                        return codeEl.length ? codeEl.text() : $(targetId).text();
+                    }
+                });
+                cp.on("success", (e) => {
+                    e.clearSelection();
+                    this.toast(this.t('已复制到剪切板'));
+                    const icon = $(e.trigger).find("i");
+                    icon.removeClass("fa-copy").addClass("fa-check");
+                    setTimeout(() => {
+                        icon.removeClass("fa-check").addClass("fa-copy");
+                    }, 2000);
+                });
+                cp.on("error", () => {
+                    this.toast(this.t('复制失败'), TYPE_DANGER);
+                });
+                
+                // 自动换行功能
+                $(document).off("click.pkCodeWrap").on("click.pkCodeWrap", ".pk-code-wrap", (e) => {
+                    const btn = $(this.ct(e));
+                    const targetId = btn.attr("data-target");
+                    const preEl = $("#" + targetId);
+                    const icon = btn.find("i");
+                    
+                    if (preEl.hasClass("pk-code-wrapped")) {
+                        preEl.removeClass("pk-code-wrapped");
+                        icon.removeClass("fa-align-justify").addClass("fa-align-left");
+                        btn.attr("title", this.t('切换自动换行'));
+                    } else {
+                        preEl.addClass("pk-code-wrapped");
+                        icon.removeClass("fa-align-left").addClass("fa-align-justify");
+                        btn.attr("title", this.t('取消自动换行'));
+                    }
+                });
+            }
         }
     }
-
-    generatePostQrcode() {
-        //生成微信分享二维码
-        const wsEl = $("#wx-share");
-        const qrUrl = wsEl.attr("data-url");
-        wsEl.attr("data-original-title", `<p class='text-center t-sm mb-1 mt-1'>使用微信扫一扫</p><img width="180" class='mb-1' alt='微信二维码' src='${qrUrl}'/>`)
-    }
-
 
     localstorageToggle(name, val = null) {
         return val != null ? localStorage.setItem(name, val) : localStorage.getItem(name);
@@ -291,82 +798,168 @@ class Puock {
             emailText = this.localstorageToggle("comment_email"),
             urlText = this.localstorageToggle("comment_url");
         if (authorText != null && emailText != null) {
-            $("#author").val(authorText);
-            $("#email").val(emailText);
-            $("#url").val(urlText);
+            $("#comment_author").val(authorText);
+            $("#comment_email").val(emailText);
+            $("#comment_url").val(urlText);
         }
     }
 
     setCommentInfo() {
-        this.localstorageToggle("comment_author", $("#author").val());
-        this.localstorageToggle("comment_email", $("#email").val());
-        this.localstorageToggle("comment_url", $("#url").val());
+        this.localstorageToggle("comment_author", $("#comment_author").val());
+        this.localstorageToggle("comment_email", $("#comment_email").val());
+        this.localstorageToggle("comment_url", $("#comment_url").val());
     }
 
-    asyncCacheViews(postId) {
-        $.post(this.data.params.home + "/wp-admin/admin-ajax.php?action=async_pk_views", {id: postId}, (res) => {
-            if (res.code !== 0) {
-                console.error(res.msg)
-            } else {
-                $("#post-views").text(res.data)
+    asyncCacheViews() {
+        if (this.data.params.async_view_id && this.data.params.async_view_generate_time) {
+            if (((new Date()).getTime() / 1000) - this.data.params.async_view_generate_time > 10) {
+                $.post(this.data.params.home + "/wp-admin/admin-ajax.php?action=async_pk_views",
+                    {id: this.data.params.async_view_id}, (res) => {
+                        if (res.code !== 0) {
+                            console.error(res.msg)
+                        } else {
+                            $("#post-views").text(res.data)
+                        }
+                    }, 'json').fail((e) => {
+                    console.error(e)
+                })
             }
-        }, 'json').error((e) => {
-            console.error(e)
-        })
+        }
     }
 
     modeInit() {
-        let light = this.localstorageToggle('light');
-        if (light !== undefined) {
-            this.modeChange(light);
-        }
+        this.modeChange();
     }
 
-    modeChange(isLight = null, isSwitch = false) {
-        const body = $("body");
-        if (typeof (isLight) === "string") {
-            isLight = isLight === 'true';
+    toggleScTc() {
+        if (!this.data.params.cn_sc_tc_toggle || typeof OpenCC === 'undefined') return;
+        const current = Cookies.get('pk_lang') || 'sc';
+        const target = current === 'sc' ? 'tc' : 'sc';
+        Cookies.set('pk_lang', target, {expires: 365});
+        this.applyScTc(target);
+    }
+
+    ensureScTcHandler(reset = false) {
+        if ((!this.data.params.cn_sc_tc_toggle && this.data.params.cn_sc_tc_default !== 'tc') || typeof OpenCC === 'undefined') return null;
+        if (reset || !this.data.instance.scTcHandler) {
+            const root = document.documentElement;
+            root.lang = 'zh-CN';
+            this.data.instance.scTcHandler = OpenCC.HTMLConverter(
+                OpenCC.Converter({from: 'cn', to: 'tw'}),
+                root,
+                'zh-CN',
+                'zh-TW'
+            );
         }
-        if (isLight === null) {
-            isLight = body.hasClass(this.data.tag + "-light");
+        return this.data.instance.scTcHandler;
+    }
+
+    applyScTc(target) {
+        if ((!this.data.params.cn_sc_tc_toggle && this.data.params.cn_sc_tc_default !== 'tc') || typeof OpenCC === 'undefined') return;
+        const handler = this.ensureScTcHandler();
+        if (!handler) return;
+        if (target === 'tc') {
+            handler.convert();
+        } else if (handler.restore) {
+            handler.restore();
+        }
+        this.updateScTcToggle(target);
+    }
+
+    scTcInit() {
+        if ((!this.data.params.cn_sc_tc_toggle && this.data.params.cn_sc_tc_default !== 'tc') || typeof OpenCC === 'undefined') return;
+        this.ensureScTcHandler(true);
+        this.applyScTc(Cookies.get('pk_lang') || this.data.params.cn_sc_tc_default || 'sc');
+    }
+
+    updateScTcToggle(target) {
+        const title = target === 'tc' ? '切换为简体' : '切换为繁体';
+        $('.sc-tc-toggle').attr('title', title).attr('data-bs-original-title', title);
+    }
+
+    modeChange(toLight = null, isSwitch = false) {
+        const body = $("body");
+        if (typeof (toLight) === "string") {
+            toLight = toLight === 'true';
+        }
+        let mode = Cookies.get('mode') || this.data.params.theme_mode || 'auto'
+        if (toLight === null) {
+            toLight = mode==='light';
+            if(mode==='auto'){
+                toLight = !window.matchMedia('(prefers-color-scheme:dark)').matches
+            }
         }
         if (isSwitch) {
-            isLight = !isLight;
+            if(mode==='light'){
+                mode = 'dark'
+                toLight = false;
+            }else if(mode==='dark'){
+                mode = 'auto'
+                toLight = !window.matchMedia('(prefers-color-scheme:dark)').matches;
+            }else{
+                mode = 'light'
+                toLight = true;
+            }
+            console.log(mode, toLight)
         }
         let dn = 'd-none';
-        if (isLight) {
+        if (toLight) {
             $("#logo-light").removeClass(dn);
             $("#logo-dark").addClass(dn);
         } else {
             $("#logo-dark").removeClass(dn);
             $("#logo-light").addClass(dn);
         }
-        body.removeClass(isLight ? this.data.tag + "-dark" : this.data.tag + "-light");
-        body.addClass(isLight ? this.data.tag + "-light" : this.data.tag + "-dark");
-        this.localstorageToggle('light', isLight)
-        Cookies.set('mode', isLight ? 'light' : 'dark')
+        $(".colorMode").each((_, e) => {
+            const el = $(e);
+            let target;
+            if (el.prop("localName") === 'i') {
+                target = el;
+            } else {
+                target = $(el).find("i");
+            }
+            if (target) {
+                target.removeClass("fa-sun").removeClass("fa-moon").removeClass('fa-circle-half-stroke')
+                    .addClass(mode==='auto' ? 'fa-circle-half-stroke' : (mode==='light' ? "fa-sun" : "fa-moon"));
+            }
+        })
+        body.removeClass(this.data.tag + "-auto")
+        body.removeClass(toLight ? this.data.tag + "-dark" : this.data.tag + "-light");
+        body.addClass(toLight ? this.data.tag + "-light" : this.data.tag + "-dark");
+        document.documentElement.setAttribute('data-bs-theme', toLight ? 'light' : 'dark');
+        // this.localstorageToggle('light', toLight)
+        Cookies.set('mode', mode)
     }
 
     modeChangeListener() {
-        this.modeChange(!window.matchMedia('(prefers-color-scheme:dark)').matches);
-    }
-
-    registerModeChangeEvent() {
-        try {
-            window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change', this.modeChangeListener);
-        } catch (ex) {
-            window.matchMedia('(prefers-color-scheme:dark)').addListener(this.modeChangeListener);
+        if((Cookies.get('mode') || this.data.params.theme_mode)==='auto'){
+            this.modeChange(!window.matchMedia('(prefers-color-scheme:dark)').matches);
         }
     }
 
-    infoToastShow(text, title = '提示') {
+    registerModeChangeEvent() {
+        if (this.data.params.mode_switch) {
+            try {
+                window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change', () => {
+                    this.modeChangeListener()
+                });
+            } catch (ex) {
+                window.matchMedia('(prefers-color-scheme:dark)').addListener(() => {
+                    this.modeChangeListener()
+                });
+            }
+        }
+    }
+
+    infoToastShow(text, title = null) {
+        const safeTitle = title || this.t('提示');
         const infoToast = $('#infoToast');
-        $("#infoToastTitle").html(title);
+        $("#infoToastTitle").html(safeTitle);
         $("#infoToastText").html(text);
         infoToast.modal('show');
     }
 
-    registerMobileMenuEvent() {
+    registerMobileMenu() {
         const fn = (s) => {
             if (typeof (s) !== 'string') {
                 s = 'Out'
@@ -381,9 +974,9 @@ class Puock {
         });
     }
 
-    gotoCommentArea() {
-        $('html,body').animate({scrollTop: $("#comments").offset().top}, 800);
-        this.lazyLoadInit()
+    gotoArea(el, speed = 50) {
+        const top = $(el).offset().top - $("#header").height() - 10;
+        $('html,body').stop().animate({scrollTop: top}, speed);
     }
 
     pushAjaxCommentHistoryState(href) {
@@ -398,13 +991,14 @@ class Puock {
             let href = $(this.ct(e)).attr("href");
             this.pushAjaxCommentHistoryState(href);
             postCommentsEl.html(" ");
+            this.gotoArea("#comments");
             loadBox.removeClass('d-none');
             $.post(href, {}, (data) => {
                 postCommentsEl.html($(data).find("#post-comments"));
                 loadBox.addClass('d-none');
-                this.initCodeHighlight();
-                this.gotoCommentArea()
-            }).error(() => {
+                this.initCodeHighlight(false);
+                this.lazyLoadInit(postCommentsEl);
+            }).fail(() => {
                 location = href;
             });
             return false;
@@ -412,37 +1006,61 @@ class Puock {
 
     }
 
+    parseFormData(formEl, args = {}) {
+        const dataArr = formEl.serializeArray();
+        const data = {...args};
+        for (let i = 0; i < dataArr.length; i++) {
+            data[dataArr[i].name] = dataArr[i].value;
+        }
+        return jQuery.param(data);
+    }
+
     eventCommentPreSubmit() {
         $(document).on('submit', '#comment-form', (e) => {
-            if ($("#comment-logged").val() === '0' && ($.trim($("#author").val()) === '' || $.trim($("#email").val()) === '')) {
-                this.infoToastShow('评论信息不能为空');
-                return false;
-            }
-            if (this.data.params.vd_comment) {
-                if ($.trim($("#comment-vd").val()) === '') {
-                    this.infoToastShow('验证码不能为空');
-                    return false;
-                }
+            e.preventDefault();
+            if ($("#comment-logged").val() === '0' && ($.trim($("#comment_author").val()) === '' || $.trim($("#comment_email").val()) === '')) {
+                this.toast(this.t('评论信息不能为空'), TYPE_WARNING);
+                return;
             }
             if ($.trim($("#comment").val()) === '') {
-                this.infoToastShow('评论内容不能为空');
-                return false;
+                this.toast(this.t('评论内容不能为空'), TYPE_WARNING);
+                return;
+            }
+            if (this.data.params.vd_comment) {
+                const vdType = this.data.params.vd_type;
+                if (vdType === 'img') {
+                    if ($.trim($("#comment-vd").val()) === '') {
+                        this.toast(this.t('验证码不能为空'), TYPE_WARNING);
+                        return;
+                    }
+                } else if (vdType === 'gt') {
+                    this.gt.validate((code) => {
+                        this.commentSubmit(this.ct(e), code)
+                    })
+                    return;
+                } else if (vdType === 'turnstile') {
+                    const form = $(this.ct(e));
+                    if (form.find('.cf-turnstile').length && !$.trim(form.find('[name="cf-turnstile-response"]').val())) {
+                        this.toast(this.t('验证码不能为空'), TYPE_WARNING);
+                        return;
+                    }
+                }
             }
             this.commentSubmit(this.ct(e))
-            return false;
         })
     }
 
-    commentSubmit(target) {
+    commentSubmit(target, args = {}) {
         let submitUrl = $("#comment-form").attr("action");
         this.commentFormLoadStateChange();
+        const el = $(target);
         $.ajax({
             url: submitUrl,
-            data: $(target).serialize(),
-            type: $(target).attr('method'),
+            data: this.parseFormData(el, args),
+            type: el.attr('method'),
             success: (data) => {
-                this.infoToastShow('评论已提交成功');
-                this.loadCommentCaptchaImage(null);
+                this.toast(this.t('评论已提交成功'), TYPE_SUCCESS);
+                this.loadCommentCaptchaImage($(".comment-captcha"));
                 $("#comment-vd").val("");
                 $("#comment").val("");
                 if (this.data.comment.replyId != null) {
@@ -461,8 +1079,20 @@ class Puock {
                 this.setCommentInfo()
             },
             error: (res) => {
+                let jsonVal = null;
+                try {
+                    jsonVal = JSON.parse(res.responseText)
+                } catch (e) {
+                }
                 this.commentFormLoadStateChange();
-                this.infoToastShow(res.responseText);
+                if (jsonVal) {
+                    this.toast(jsonVal.msg, TYPE_DANGER);
+                    if (jsonVal.refresh_code) {
+                        this.loadCommentCaptchaImage($(".comment-captcha"));
+                    }
+                } else {
+                    this.toast(res.responseText, TYPE_DANGER);
+                }
             }
         });
     }
@@ -470,20 +1100,20 @@ class Puock {
     commentFormLoadStateChange() {
         const commentSubmit = $("#comment-submit");
         if (this.data.comment.loading) {
-            commentSubmit.html("请等待" + this.data.comment.time + "s");
+            commentSubmit.html(this.tf(this.t('请等待%s秒'), this.data.comment.time));
             this.data.comment.val = setInterval(() => {
                 if (this.data.comment.time <= 1) {
                     clearInterval(this.data.comment.val);
-                    commentSubmit.html("提交评论");
+                    commentSubmit.html(this.t('提交评论'));
                     commentSubmit.removeAttr("disabled");
                     this.data.comment.time = 5;
                 } else {
                     --this.data.comment.time;
-                    commentSubmit.html("请等待" + this.data.comment.time + "s");
+                    commentSubmit.html(this.tf(this.t('请等待%s秒'), this.data.comment.time));
                 }
             }, 1000);
         } else {
-            commentSubmit.html('<span class="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>提交中...');
+            commentSubmit.html('<span class="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>' + this.t('提交中...'));
             commentSubmit.attr("disabled", true)
         }
         this.data.comment.loading = !this.data.comment.loading;
@@ -493,7 +1123,7 @@ class Puock {
         $(document).on("click", "[id^=comment-reply-]", (e) => {
             this.data.comment.replyId = $(this.ct(e)).attr("data-id");
             if ($.trim(this.data.comment.replyId) === '') {
-                this.infoToastShow('结构有误');
+                this.toast(this.t('结构有误'), TYPE_DANGER);
                 return;
             }
             const cf = $("#comment-form"),
@@ -520,32 +1150,168 @@ class Puock {
     }
 
     eventSendPostLike() {
+        let lastSendTime = 0;
+        let throttleTimeMs = 3000;
         $(document).on("click", "#post-like", (e) => {
+            const currentTime = new Date().getTime();
+            if (currentTime - lastSendTime < throttleTimeMs) {
+                this.toast(this.t('操作过于频繁'), TYPE_WARNING);
+                return
+            }
+            lastSendTime = currentTime
             const vm = $(this.ct(e))
             let id = vm.attr("data-id");
-            $.post("/wp-admin/admin-ajax.php", {action: 'puock_like', um_id: id, um_action: 'like'}, (res) => {
+            let nonce = vm.attr("data-nonce");
+            $.post("/wp-admin/admin-ajax.php", {action: 'puock_like', um_id: id, um_action: 'like', _wpnonce: nonce}, (res) => {
                 if (res.e === 0) {
                     vm.find("span").html(res.d);
                     vm.addClass("bg-primary text-light");
                 } else {
-                    this.infoToastShow(res.t);
+                    this.toast(res.t);
                 }
-            }, 'json').error(() => {
-                this.infoToastShow('点赞异常');
+            }, 'json').fail(() => {
+                this.toast(this.t('点赞异常'), TYPE_DANGER);
+            })
+        })
+    }
+
+    eventLoadMore() {
+        $(document).on("click", "#load-more-btn", (e) => {
+            const btn = $(this.ct(e));
+            const paged = btn.data("paged");
+            const postsContainer = $("#posts > div:first");
+
+            btn.prop("disabled", true).html('<i class="fa fa-spinner fa-spin"></i> ' + this.t('加载中...'));
+
+            $.post("/wp-admin/admin-ajax.php", {action: 'pk_load_more_posts', paged: paged}, (res) => {
+                if (res.code === 0) {
+                    const newPosts = $(res.data.html);
+                    newPosts.hide();
+                    postsContainer.append(newPosts);
+                    newPosts.fadeIn();
+                    btn.data("paged", res.data.paged);
+
+                    if (!res.data.has_more) {
+                        btn.remove();
+                    } else {
+                        btn.prop("disabled", false).html('<i class="fa fa-plus"></i> ' + this.t('加载更多'));
+                    }
+
+                    this.lazyLoadInit(newPosts);
+                    this.tooltipInit(newPosts.find("[data-bs-toggle=\"tooltip\"]"));
+                } else {
+                    this.toast(res.msg || this.t('加载失败'), TYPE_DANGER);
+                    btn.prop("disabled", false).html('<i class="fa fa-plus"></i> ' + this.t('加载更多'));
+                }
+            }, 'json').fail(() => {
+                this.toast(this.t('加载异常'), TYPE_DANGER);
+                btn.prop("disabled", false).html('<i class="fa fa-plus"></i> ' + this.t('加载更多'));
             })
         })
     }
 
     eventSmiley() {
-        const el = "#twemoji"
-        $(document).on('click', '#comment-smiley', () => {
-            $(el).modal("show");
-        });
         $(document).on('click', '.smiley-img', (e) => {
             const comment = $("#comment");
             comment.val(comment.val() + ' ' + $(this.ct(e)).attr("data-id") + ' ');
-            $(el).modal("hide");
+            layer.closeAll();
         })
+    }
+
+    startLoading() {
+        return layer.load(0, {
+            shade: [0.5, '#000']
+        })
+    }
+
+    stopLoading(id = null) {
+        layer.close(id)
+    }
+
+    getRemoteHtmlNode(url, callback) {
+        const loading = this.startLoading()
+        $.ajax({
+            url: url,
+            type: 'GET',
+            success: (res)=>{
+                this.stopLoading(loading)
+                callback(res)
+            },
+            error: (err)=> {
+                console.error(err)
+                this.stopLoading(loading)
+                this.toast(this.t('获取内容节点数据失败'), TYPE_DANGER)
+            }
+        })
+    }
+
+    initModalToggle() {
+        $(document).on("click", ".pk-modal-toggle", (e) => {
+            const el = $(this.ct(e));
+            const noTitle = el.data("no-title") !== undefined;
+            const noPadding = el.data("no-padding") !== undefined;
+            const title = el.attr("title") || el.data("title") || this.t('提示');
+            const url = el.data("url");
+            const onceLoad = el.data("once-load")
+            const id = SparkMD5.hash(url)
+            if (onceLoad && this.data.modalStorage[id]) {
+                this.modalLoadRender(id, this.data.modalStorage[id], title, noTitle, noPadding)
+            } else {
+                this.getRemoteHtmlNode(url, (res) => {
+                    if (onceLoad) {
+                        if (!this.data.modalStorage[id]) {
+                            this.data.modalStorage[id] = res;
+                        }
+                    }
+                    this.modalLoadRender(id, res, title, noTitle, noPadding)
+                })
+            }
+        })
+    }
+
+    modalLoadRender(dataId, html, title, noTitle, noPadding) {
+        const id = "pk-modal-" + dataId;
+        layer.open({
+            type: 1,
+            title: noTitle ? false : title,
+            content: `<div id="${id}" style='${noPadding ? '' : 'padding: 20px'}' class='fs14'>${html}</div>`,
+            shadeClose: true,
+        })
+        const idEl = $("#" + id);
+        this.lazyLoadInit(idEl);
+        this.tooltipInit(idEl.find("[data-bs-toggle=\"tooltip\"]"));
+        this.renderTurnstileWidgets(idEl);
+    }
+
+    renderTurnstileWidgets(scope) {
+        const run = () => {
+            if (!window.turnstile || typeof window.turnstile.render !== 'function') {
+                return;
+            }
+            $(scope).find('.cf-turnstile').addBack('.cf-turnstile').each((_, el) => {
+                if (el.querySelector('iframe') || $(el).closest('.d-none').length) {
+                    return;
+                }
+                window.turnstile.render(el);
+            });
+        };
+        if (window.turnstile && typeof window.turnstile.ready === 'function') {
+            window.turnstile.ready(run);
+        } else {
+            run();
+        }
+    }
+
+    resetTurnstileWidgets(scope) {
+        if (!window.turnstile || typeof window.turnstile.reset !== 'function') {
+            return;
+        }
+        $(scope).find('.cf-turnstile').each((_, el) => {
+            try {
+                window.turnstile.reset(el);
+            } catch (e) {
+            }
+        });
     }
 
     eventPostMainBoxResize() {
@@ -598,20 +1364,20 @@ class Puock {
             const repo = el.attr("data-repo");
             if (repo) {
                 $.get(`https://api.github.com/repos/${repo}`, (res) => {
-                    const link_html = `class="hide-hover" href="${res.url}" target="_blank" rel="noreferrer"`;
-                    el.html(`<div class="card-header"><i class="czs-github-logo"></i><a ${link_html}>${res.full_name}</a></div>
+                    const link_html = `class="hide-hover" href="${res.html_url}" target="_blank" rel="noreferrer"`;
+                    el.html(`<div class="card-header"><i class="fa-brands fa-github"></i><a ${link_html}>${res.full_name}</a></div>
                     <div class="card-body">${res.description}</div>
                     <div class="card-footer">
                     <div class="row">
-                    <div class="col-4"><i class="czs-star"></i><a ${link_html}>${res.stargazers_count}</a></div>
-                    <div class="col-4"><i class="czs-code-fork"></i><a ${link_html}>${res.forks}</a></div>
-                    <div class="col-4"><i class="czs-eye"></i><a ${link_html}>${res.subscribers_count}</a></div>
+                    <div class="col-4"><i class="fa-regular fa-star"></i><a ${link_html}>${res.stargazers_count}</a></div>
+                    <div class="col-4"><i class="fa-solid fa-code-fork"></i><a ${link_html}>${res.forks}</a></div>
+                    <div class="col-4"><i class="fa-regular fa-eye"></i><a ${link_html}>${res.subscribers_count}</a></div>
                     </div>
                     </div>
                 `);
                     el.addClass("loaded");
-                }, 'json').error((err) => {
-                    el.html(`<div class="alert alert-danger"><i class="czs-warning"></i>&nbsp;请求Github项目详情异常：${repo}</div>`)
+                }, 'json').fail((err) => {
+                    el.html(`<div class="alert alert-danger"><i class="fa fa-warning"></i>&nbsp;${this.tf(this.t('请求Github项目详情异常：%s'), repo)}</div>`)
                 });
             }
         })
@@ -621,28 +1387,91 @@ class Puock {
         const prevOrNextEl = $(".single-next-or-pre")
         if (prevOrNextEl) {
             window.onkeyup = function (event) {
-                let url = null;
-                switch (event.key) {
-                    case 'ArrowLeft': {
-                        url = prevOrNextEl.find("a[rel='prev']").attr("href");
-                        break
+                if('BODY'===event.target?.tagName){
+                    let url = null;
+                    switch (event.key) {
+                        case 'ArrowLeft': {
+                            url = prevOrNextEl.find("a[rel='prev']").attr("href");
+                            break
+                        }
+                        case 'ArrowRight': {
+                            url = prevOrNextEl.find("a[rel='next']").attr("href");
+                            break
+                        }
                     }
-                    case 'ArrowRight': {
-                        url = prevOrNextEl.find("a[rel='next']").attr("href");
-                        break
+                    if (url) {
+                        window.location = url
                     }
-                }
-                if (url) {
-                    window.location = url
                 }
             }
         }
     }
 
+    swiperInit() {
+        $("[data-swiper='init']").each((_, _el) => {
+            const el = $(_el);
+            const swiperClass = el.attr("data-swiper-class");
+            const elArgs = el.attr("data-swiper-args");
+            let args = {}
+            if (elArgs) {
+                args = JSON.parse(elArgs)
+            }
+            new Swiper('.' + swiperClass, args);
+        });
+    }
+
+    swiperOnceEvent() {
+        $(document).on("click", ".swiper-slide a", (e) => {
+            if (this.data.params.is_pjax) {
+                e.preventDefault();
+                this.goUrl(e.currentTarget.href)
+            }
+        });
+    }
+
+    loadHitokoto() {
+        setTimeout(() => {
+            $(".widget-puock-hitokoto").each((_, v) => {
+                const el = $(v);
+                const api = el.attr("data-api") || "https://v1.hitokoto.cn/"
+                $.get(api, (res) => {
+                    el.find(".t").text(res.hitokoto ?? res.content ?? this.t('无内容'));
+                    el.find('.f').text(res.from);
+                    el.find('.fb').removeClass("d-none");
+                }, 'json').fail((err) => {
+                    console.error(err)
+                    el.find(".t").text(this.tf(this.t('加载失败：%s'), err.responseText || err));
+                    el.remove(".fb");
+                })
+            })
+        }, 300)
+    }
+
+
+    toast(msg, type = TYPE_PRIMARY, options = {}) {
+        options = Object.assign({
+            duration: 2600,
+            close: false,
+            position: 'right',
+            gravity: 'bottom',
+            offset: {},
+            className: 't-' + type,
+        }, options)
+        const t = Toastify({
+            text: msg,
+            ...options
+        });
+        t.showToast();
+        return t;
+    }
+
 }
 
-$(() => {
-    window.Puock = new Puock()
-    window.Puock.onceInit()
-})
-
+jQuery(() => {
+        if (window.$ === undefined) {
+            window.$ = jQuery;
+        }
+        window.Puock = new Puock()
+        window.Puock.onceInit()
+    }
+)

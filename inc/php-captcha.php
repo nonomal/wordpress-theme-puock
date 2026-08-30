@@ -80,10 +80,12 @@ class CaptchaBuilder
             $this->fonts = $config['fonts'];
         }else {
             $fontDir = __DIR__ . '/fonts/';
-
-            $this->fonts = array_filter(array_slice(scandir($fontDir), 2), function ($file) use ($fontDir) {
-                return is_file($fontDir . $file) && strcasecmp(pathinfo($file, PATHINFO_EXTENSION), 'ttf') === 0;
-            });
+            $scan_dir = scandir($fontDir);
+            if($scan_dir){
+                $this->fonts = array_filter(array_slice(scandir($fontDir), 2), function ($file) use ($fontDir) {
+                    return is_file($fontDir . $file) && strcasecmp(pathinfo($file, PATHINFO_EXTENSION), 'ttf') === 0;
+                });
+            }
             if (empty($this->fonts) === false) {
                 foreach ($this->fonts as &$font) {
                     $font = $fontDir . $font;
@@ -104,7 +106,7 @@ class CaptchaBuilder
 
         imagefill($this->image,0,0,$this->backColor);
         if (empty($this->fonts)) {
-            throw new \Exception('字体不存在');
+            throw new \Exception(__('字体不存在', PUOCK));
         }
 
         $this->textFont = $this->fonts[array_rand($this->fonts)];
@@ -304,9 +306,9 @@ class CaptchaBuilder
         list($red,$green,$blue) = $this->getRandColor();
         $increase  = 30 + mt_rand(1,254);
 
-        $red = abs(min(255,$red - $increase));
-        $green  = abs(min(255,$green - $increase));
-        $blue  = abs(min(255,$blue - $increase));
+        $red = abs(min(255,abs($red - $increase)));
+        $green = abs(min(255,abs($green - $increase)));
+        $blue = abs(min(255,abs($blue - $increase)));
 
         return [$red,$green,$blue];
     }
